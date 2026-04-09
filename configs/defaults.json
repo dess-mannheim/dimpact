@@ -1,0 +1,75 @@
+{
+  "dgi": {
+    "num_layers": 2,
+    "iterations": 10,
+    "epochs": 200,
+    "patience": 10,
+    "num_workers": 1,
+    "batch_size": 256,
+    "shuffle": "True",
+    "num_neighbors": [10, 10, 25],
+    "learning_rate": 0.001
+  },
+  "node2vec": {
+    "iterations": 10,
+    "epochs": 50,
+    "patience": 5,
+    "walk_length": 20,
+    "context_size": 10,
+    "walks_per_node": 10,
+    "num_negative_samples": 1,
+    "p": 1.0,
+    "q": 1.0,
+    "sparse": "True",
+    "batch_size": 128,
+    "shuffle": "True",
+    "learning_rate": 0.01
+  },
+  "graphsage": {
+    "iterations": 10,
+    "epochs": 200,
+    "patience": 10,
+    "learning_rate": 0.001,
+    "num_layers": 2,
+    "num_neighbors": 10,
+    "neg_sampling_ratio": 1,
+    "shuffle": "True",
+    "batch_size": 256
+  },
+  "sdne": {
+    "iterations": 10,
+    "sampling_type": "None",
+    "sampling_iteration": 1,
+    "sampling_ratio": 0.5,
+    "size": "None",
+    "density": "None",
+    "beta": 5,
+    "alpha": 100,
+    "nu": 1,
+    "epochs": 30,
+    "rho": 0.3,
+    "xeta": 0.001
+    },
+  "hope": {
+    "iterations": 10,
+    "sampling_type": "None",
+    "sampling_iteration": 1,
+    "sampling_ratio": 0.5,
+    "size": "None",
+    "density": "None",
+    "beta": 0.01
+  },
+  "verse": {
+    "iterations": 10,
+    "n_neg_samples": 3,
+    "alpha": 0.85,
+    "lr": 0.025
+  },
+  "asne": {
+    "iterations": 10,
+    "epochs": 100,
+    "learning_rate": 0.05,
+    "down_sampling": 0.0001,
+	"min_count": 1
+  }
+}
