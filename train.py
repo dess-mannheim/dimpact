@@ -51,6 +51,8 @@ def parse_args() -> Namespace:
     )
     parser.add_argument("--n_jobs", type=int, default=1, help="Number of parallel jobs to run (if possible)")
 
+    parser.add_argument("--seeds", nargs="+", type=int, default=None, help="Training seeds to run.")
+
     return parser.parse_args()
 
 
@@ -61,6 +63,7 @@ def train_embeddings(
     tune_id: int | None = None,
     overwrite: bool = False,
     n_jobs: int = 1,
+    seeds: List[int] = None,
 ) -> Dict[int, float]:
 
     data, edge_list_path = data_utils.load_dataset(dataset_params.copy())
@@ -77,6 +80,10 @@ def train_embeddings(
         b_tune=True if tune_id is not None else False,
     )
 
+    if seeds is None:
+        seeds = list(range(embedding_config[CONFIG_ITERATIONS_KEY]))
+    embedding_config[CONFIG_TRAINING_SEEDS_KEY] = seeds
+
     if tune_id is None:
         print(f"Training {embedding_name} model on {dataset_name} with embedding dimension {embedding_dim}")
     else:
@@ -86,10 +93,9 @@ def train_embeddings(
 
         os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
         os.environ["TORCH_USE_CUDA_DSA"] = "1"
-        for iteration in range(embedding_config[CONFIG_ITERATIONS_KEY]):
-
-            save_path = osp.join(save_dir, MODEL_FILE_NAME(model_seed=iteration, tune_id=tune_id))
-            emb_path = osp.join(save_dir, EMBEDDING_FILE_NAME(model_seed=iteration, tune_id=tune_id))
+        for seed in seeds:
+            save_path = osp.join(save_dir, MODEL_FILE_NAME(model_seed=seed, tune_id=tune_id))
+            emb_path = osp.join(save_dir, EMBEDDING_FILE_NAME(model_seed=seed, tune_id=tune_id))
 
             if not osp.isfile(emb_path) or overwrite:
                 if embedding_name == DGI:
@@ -98,7 +104,7 @@ def train_embeddings(
                         embedding_dim=embedding_dim,
                         config=embedding_config,
                         save_path=save_path,
-                        seed=iteration,
+                        seed=seed,
                         embedding_path=emb_path,
                     )
                 elif embedding_name == GRAPHSAGE:
@@ -107,42 +113,42 @@ def train_embeddings(
                         embedding_dim=embedding_dim,
                         config=embedding_config,
                         save_path=save_path,
-                        seed=iteration,
+                        seed=seed,
                         embedding_path=emb_path,
                     )
                 else:
                     raise ValueError("Invalid embedding type!")
 
-                results_dict[iteration] = best_acc
+                results_dict[seed] = best_acc
             else:
-                print(f"Embedding with seed {iteration} has already been trained and overwrite is False.")
+                print(f"Embedding with seed {seed} has already been trained and overwrite is False.")
 
     elif embedding_name == VERSE:
         data_dir = BUILD_DATASET_SRC_DIR(dataset_params)
         downstream_df_path = os.path.join(data_dir, DOWNSTREAM_TASK_DATA_FILE_NAME)
-        for iteration in range(embedding_config[CONFIG_ITERATIONS_KEY]):
-            save_path = os.path.join(save_dir, EMBEDDING_FILE_NAME(model_seed=iteration, tune_id=tune_id))
+        for seed in seeds:
+            save_path = os.path.join(save_dir, EMBEDDING_FILE_NAME(model_seed=seed, tune_id=tune_id))
 
             if not osp.isfile(save_path) or overwrite:
                 best_acc = verse.train_model(
                     edge_list_path=edge_list_path,
                     embedding_config=embedding_config,
                     save_path=save_path,
-                    seed=iteration,
+                    seed=seed,
                     downstream_path=downstream_df_path,
                     n_jobs=n_jobs,
                 )
-                results_dict[iteration] = best_acc
+                results_dict[seed] = best_acc
 
             else:
-                print(f"Embedding with seed {iteration} has already been trained and overwrite is False.")
+                print(f"Embedding with seed {seed} has already been trained and overwrite is False.")
     else:
 
         if (
             all(
                 [
                     osp.isfile(os.path.join(save_dir, EMBEDDING_FILE_NAME(tune_id=tune_id, model_seed=seed)))
-                    for seed in range(embedding_config[CONFIG_ITERATIONS_KEY])
+                    for seed in seeds
                 ]
             )
             and not overwrite
@@ -201,9 +207,13 @@ def train_embeddings_over_dimensions(
     dimensions: List[int],
     overwrite: bool,
     n_jobs: int,
+    seeds: List[int] = None,
 ) -> None:
 
     config = train_utils.load_default_config(embedding_method)
+
+    for param in DATASET_SPECIFIC_PARAM_DICT[embedding_method][dataset_name].keys():
+        config[param] = DATASET_SPECIFIC_PARAM_DICT[embedding_method][dataset_name][param]
 
     dataset_params = {CONFIG_DATASET_NAME_KEY: dataset_name, CONFIG_DATA_SUBSAMPLING_INDICATOR_KEY: False}
 
@@ -228,6 +238,7 @@ def train_embeddings_over_dimensions(
             embedding_config=config,
             overwrite=overwrite,
             n_jobs=n_jobs,
+            seeds=seeds,
         )
 
 
@@ -247,4 +258,5 @@ if __name__ == "__main__":
                 dimensions=args.dimensions,
                 overwrite=args.overwrite,
                 n_jobs=args.n_jobs,
+                seeds=args.seeds,
             )

@@ -1,5 +1,6 @@
 import random
 import pickle
+import json
 
 import networkx as nx
 
@@ -9,7 +10,7 @@ from sklearn.preprocessing import LabelEncoder
 import torch
 
 from torch_geometric.data import Data
-from torch_geometric.datasets import FacebookPagePage, Flickr, Planetoid, AttributedGraphDataset
+from torch_geometric.datasets import FacebookPagePage, Planetoid, AttributedGraphDataset
 from torch_geometric.utils import to_networkx, negative_sampling
 
 from data.ogbl_ddi.dataset import OGBL_DDI
@@ -125,8 +126,11 @@ def create_downstream_df(data, dataset_params: Dict[str, Any]):
         raise ValueError(f"Unsupported edge array shape {edges.shape}; expected (n,2) or (2,n).")
 
     dataset_name = dataset_params[CONFIG_DATASET_NAME_KEY]
-    if DATASET_TASK_DICT[dataset_name] == NODE_CLASSIFICATION:
+    task = DATASET_TASK_DICT[dataset_name]
+    if task == NODE_CLASSIFICATION:
         y = data.y.numpy()
+        class_labels = sorted(int(label) for label in np.unique(y).tolist())
+        num_classes = len(class_labels)
         categories = pd.Series(
             pd.Categorical(
                 [DOWNSTREAM_TASK_DATA_TRAIN_CATEGORY] * len(y),
@@ -145,7 +149,9 @@ def create_downstream_df(data, dataset_params: Dict[str, Any]):
             columns=DOWNSTREAM_TASK_DATA_NC_COLUMN_NAMES,
             index=torch.unique(data.edge_index, sorted=True).numpy(),
         )
-    elif DATASET_TASK_DICT[dataset_name] == LINK_PREDICTION:
+    elif task == LINK_PREDICTION:
+        class_labels = [0, 1]
+        num_classes = 2
         edge_data = []
 
         pos_val_edges = _as_edge_pairs(data.val_edges["edge"])
@@ -169,6 +175,8 @@ def create_downstream_df(data, dataset_params: Dict[str, Any]):
             if not ({0, 1}.issubset(set(split_labels.unique().tolist()))):
                 raise RuntimeError(f"LP split '{split_name}' must contain both positive and negative edges.")
     else:
+        class_labels = [0, 1]
+        num_classes = 2
         edge_data = []
         pos_train_edges = data.edge_index[:, data.train_mask].numpy().T
 
@@ -197,8 +205,19 @@ def create_downstream_df(data, dataset_params: Dict[str, Any]):
             if not ({0, 1}.issubset(set(split_labels.unique().tolist()))):
                 raise RuntimeError(f"LP split '{split_name}' must contain both positive and negative edges.")
 
-    data_file_path = os.path.join(BUILD_DATASET_SRC_DIR(dataset_params), DOWNSTREAM_TASK_DATA_FILE_NAME)
+    dataset_src_dir = BUILD_DATASET_SRC_DIR(dataset_params)
+    data_file_path = os.path.join(dataset_src_dir, DOWNSTREAM_TASK_DATA_FILE_NAME)
     train_df.to_csv(data_file_path, index=True)
+
+    metadata = {
+        CONFIG_DATASET_NAME_KEY: dataset_name,
+        DATASET_METADATA_TASK_KEY: task,
+        DATASET_METADATA_NUM_CLASSES_KEY: num_classes,
+        DATASET_METADATA_CLASS_LABELS_KEY: class_labels,
+    }
+    metadata_file_path = os.path.join(dataset_src_dir, DOWNSTREAM_METADATA_JSON_FILE_NAME)
+    with open(metadata_file_path, "w") as f:
+        json.dump(metadata, f, indent=2)
 
 
 def sample_dataset(dataset, sampling_ratio, dataset_name, seed):
@@ -258,9 +277,7 @@ def load_dataset(dataset_params: Dict[str, Any], reload: bool = False) -> Tuple[
 def load_empirical_dataset(dataset_name: DATASET, dataset_params: Dict[str, Any], reload: bool = False) -> Tuple[Data, str]:
 
     dataset_dir = osp.join(DATA_DIR, dataset_name)
-    if dataset_name == FLICKR:
-        dataset = Flickr(DATA_DIR, force_reload=reload)
-    elif dataset_name == FACEBOOK:
+    if dataset_name == FACEBOOK:
         dataset = FacebookPagePage(os.path.join(DATA_DIR, FACEBOOK), force_reload=reload)
     elif dataset_name == COAUTHOR:
         dataset = CoAuthor(os.path.join(DATA_DIR, dataset_name), force_reload=reload)
@@ -358,15 +375,23 @@ def load_synthetic_dataset(dataset_name: DATASET, dataset_params: Dict[str, Any]
         if dataset_name == BARABASI_ALBERT:
             m = round(density * num_nodes / 2)
             G = nx.barabasi_albert_graph(num_nodes, m, seed=seed)
-        elif dataset_name == ERDOS_RENYI:
-            G = nx.erdos_renyi_graph(num_nodes, density, seed=seed)
         elif dataset_name == WATTS_STROGATZ:
-            k = round(density * (num_nodes - 1))
+            # In NetworkX WS graphs, odd k effectively behaves like k-1 for edge count.
+            # Choose the closest valid even k to best match the requested density.
+            raw_k = density * (num_nodes - 1)
+            max_even_k = (num_nodes - 1) if (num_nodes - 1) % 2 == 0 else (num_nodes - 2)
+            lower_even_k = int(np.floor(raw_k / 2.0) * 2)
+            upper_even_k = lower_even_k + 2
+            candidates = []
+            for candidate_k in [lower_even_k, upper_even_k]:
+                if 0 <= candidate_k <= max_even_k:
+                    candidates.append(candidate_k)
+            if len(candidates) == 0:
+                k = 0
+            else:
+                # Tie-break toward smaller k to minimize deviations from legacy behavior.
+                k = min(candidates, key=lambda candidate_k: (abs(raw_k - candidate_k), candidate_k))
             G = nx.watts_strogatz_graph(num_nodes, k, p=WATTS_STROGATZ_DEFAULT_REWIRING_PROBABILITY, seed=seed)
-        elif dataset_name == HOLME_KING:
-            # TODO: reevaluate density computation
-            m = round(density * num_nodes / 2)
-            G = nx.powerlaw_cluster_graph(num_nodes, m, density, seed=seed)
         else:
             raise ValueError("Unknown dataset_name for synthetic graphs.")
 

@@ -1,0 +1,23 @@
+name: dimpact
+channels:
+  - defaults
+dependencies:
+  - python==3.10.16
+  - jupyter
+  - networkx
+  - numpy
+  - pandas
+  - scipy
+  - matplotlib
+  - seaborn
+  - scikit-learn
+  - tqdm
+  - click
+  - pip:
+    - pytorch==2.5.1+cu121
+    - torch-geometric
+    - torchaudio==2.5.1+cu121
+    - torchvision==0.20.1+cu121
+    - einops
+    - ogb
+

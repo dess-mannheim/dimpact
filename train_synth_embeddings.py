@@ -38,7 +38,7 @@ def parse_args() -> Namespace:
         nargs="+",
         type=int,
         default=[SYNTH_DATA_EXPERIMENTS_DEFAULT_NUM_NODES],
-        help="Datasets used in evaluation.",
+        help="Number of nodes that synthetic networks should have.",
     )
     parser.add_argument(
         "--density",
@@ -64,14 +64,31 @@ def parse_args() -> Namespace:
         help="Should existing embeddings be overwritten?",
     )
     parser.add_argument(
-        "-dim", "--dimensions", nargs="+", type=int, default=EXPERIMENTS_DIMENSIONS_LIST, help="List of dimensions."
+        "-dim",
+        "--dimensions",
+        nargs="+",
+        type=int,
+        default=EXPERIMENTS_DIMENSIONS_LIST,
+        help="List of dimensions.",
     )
-    parser.add_argument("--n_jobs", type=int, default=1, help="Number of parallel jobs to run (if possible)")
+    parser.add_argument(
+        "--n_jobs",
+        type=int,
+        default=1,
+        help="Number of parallel jobs to run (if possible)",
+    )
     parser.add_argument(
         "--num_iterations",
         type=int,
         default=SYNTH_DATA_EXPERIMENTS_NUM_SEEDS,
         help="Number of random graph generation seeds.",
+    )
+    parser.add_argument(
+        "--model_seeds",
+        nargs="+",
+        type=int,
+        default=None,
+        help="Training seeds to run for each generated graph.",
     )
 
     return parser.parse_args()
@@ -119,7 +136,23 @@ def tune_synthetic_embeddings(
                 overwrite=overwrite,
                 n_jobs=n_jobs,
             )
-            param_results = {**param_results, **{gen_seed: results_dict[0]}}
+            if len(results_dict) == 0:
+                # Resume mode can hit already-existing embeddings for a tune_id/seed combination.
+                # In that case train_embeddings returns an empty dict (no new run), so force a
+                # single overwrite run to recover the tuning score deterministically.
+                results_dict = train_embeddings(
+                    embedding_name=embedding_method,
+                    dataset_params=dataset_params,
+                    embedding_config=config,
+                    tune_id=i,
+                    overwrite=True,
+                    n_jobs=n_jobs,
+                )
+            if 0 in results_dict:
+                seed_score = results_dict[0]
+            else:
+                seed_score = next(iter(results_dict.values()))
+            param_results = {**param_results, **{gen_seed: seed_score}}
 
         tuning_summary[str(i)] = {
             TUNING_SUMMARY_PARAMS_KEY: params,
@@ -138,11 +171,20 @@ def train_synthetic_embeddings(
     num_gen_seeds: int,
     overwrite: bool,
     n_jobs: int,
+    model_seeds: List[int] = None,
 ) -> None:
 
     config = train_utils.load_default_config(embedding_method)
 
+    # train_embeddings uses this value to default model seeds to range(iterations).
     config[CONFIG_ITERATIONS_KEY] = EXPERIMENTS_NUM_SYNTH_ITERATIONS
+
+    for param in SYNTH_DATASET_SPECIFIC_PARAM_DICT[embedding_method][dataset_params[CONFIG_DATASET_NAME_KEY]][
+        dataset_params[CONFIG_SYNTH_DATA_NUM_NODES_KEY]
+    ].keys():
+        config[param] = SYNTH_DATASET_SPECIFIC_PARAM_DICT[embedding_method][dataset_params[CONFIG_DATASET_NAME_KEY]][
+            dataset_params[CONFIG_SYNTH_DATA_NUM_NODES_KEY]
+        ][param]
 
     parameter_dict = train_utils.get_best_parameter_dict(
         embedding_method=embedding_method,
@@ -165,6 +207,7 @@ def train_synthetic_embeddings(
                 embedding_config=config,
                 overwrite=overwrite,
                 n_jobs=n_jobs,
+                seeds=model_seeds,
             )
 
 
@@ -208,4 +251,5 @@ if __name__ == "__main__":
                         overwrite=args.overwrite,
                         n_jobs=args.n_jobs,
                         num_gen_seeds=args.num_iterations,
+                        model_seeds=args.model_seeds,
                     )

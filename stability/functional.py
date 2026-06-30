@@ -2,11 +2,57 @@ import json
 from itertools import combinations
 import argparse
 
+import pandas as pd
 from tools import train_utils
 from joblib import Parallel, delayed
 from stability.measures import *
 
 from paths_globals import *
+
+
+def _infer_expected_output_dim(dataset_params: Dict) -> int:
+    dataset_name = dataset_params[CONFIG_DATASET_NAME_KEY]
+    task = DATASET_TASK_DICT[dataset_name]
+    if task in [LINK_PREDICTION, GRAPH_RECONSTRUCTION]:
+        return 2
+
+    dataset_src_dir = BUILD_DATASET_SRC_DIR(dataset_params)
+    metadata_path = osp.join(dataset_src_dir, DOWNSTREAM_METADATA_JSON_FILE_NAME)
+    if osp.isfile(metadata_path):
+        with open(metadata_path, "r") as f:
+            metadata = json.load(f)
+        return int(metadata[DATASET_METADATA_NUM_CLASSES_KEY])
+
+    downstream_data_path = osp.join(dataset_src_dir, DOWNSTREAM_TASK_DATA_FILE_NAME)
+    label_series = pd.read_csv(downstream_data_path, usecols=[DOWNSTREAM_TASK_DATA_LABEL_COL_KEY])[
+        DOWNSTREAM_TASK_DATA_LABEL_COL_KEY
+    ]
+    return int(label_series.nunique())
+
+
+def _load_functional_output(prediction_file_path: str, expected_output_dim: int) -> np.ndarray:
+    """Load model outputs from a saved downstream prediction matrix.
+
+    Downstream prediction files are saved as [y_test, y_pred, model_outputs...].
+    Functional similarity measures should only see the model outputs; including
+    y_test/y_pred changes argmax-based measures and compresses disagreement.
+    """
+    prediction_matrix = np.load(prediction_file_path, mmap_mode="r")
+    if prediction_matrix.ndim != 2:
+        raise ValueError(
+            f"Expected a 2D prediction matrix at {prediction_file_path}, got shape {prediction_matrix.shape}."
+        )
+
+    n_cols = prediction_matrix.shape[1]
+    if n_cols == expected_output_dim + 2:
+        return prediction_matrix[:, 2:]
+    if n_cols == expected_output_dim:
+        return prediction_matrix
+
+    raise ValueError(
+        f"Unexpected prediction output shape at {prediction_file_path}: got {n_cols} columns, expected either "
+        f"{expected_output_dim} raw output columns or {expected_output_dim + 2} columns with y_test/y_pred prefixes."
+    )
 
 
 def parse_args():
@@ -96,17 +142,21 @@ def analyze_functional_stability(
         results = {clf_name: {measure: dict() for measure in measures} for clf_name in classifiers}
 
     prediction_pairs = list(combinations(range(EXPERIMENTS_NUM_ITERATIONS), 2))
+    expected_output_dim = _infer_expected_output_dim(dataset_params)
 
     for clf_name in classifiers:
-        results[clf_name] = dict()
+        if clf_name not in results.keys():
+            results[clf_name] = dict()
         print(f"Consider predictions from {clf_name}.")
 
         for measure in measures:
-            results[clf_name][measure] = dict()
+            if measure not in results[clf_name].keys():
+                results[clf_name][measure] = dict()
             print(f"Compute downstream stability with respect to {measure} measure.")
 
             for dimension in dimensions:
-                if str(dimension) in results[clf_name][measure].keys() and not overwrite:
+                dim_key = str(dimension)
+                if dim_key in results[clf_name][measure].keys() and not overwrite:
                     continue
                 print(f"Embedding dimension is {dimension}")
 
@@ -117,11 +167,12 @@ def analyze_functional_stability(
                     clf_name=clf_name,
                 )
                 predictions = [
-                    np.load(
+                    _load_functional_output(
                         osp.join(
                             results_dir,
                             DOWNSTREAM_PREDICTIONS_FILENAME(emb_id=i, model_seed=EXPERIMENTS_DEFAULT_SEED),
-                        )
+                        ),
+                        expected_output_dim=expected_output_dim,
                     )
                     for i in range(EXPERIMENTS_NUM_ITERATIONS)
                 ]
@@ -141,19 +192,19 @@ def analyze_functional_stability(
                 ]
 
                 if measure in PAIRWISE_FUNCTIONAL_SIMILARITY_MEASURES:
-                    results[clf_name][measure][dimension] = Parallel(n_jobs=n_jobs)(
+                    results[clf_name][measure][dim_key] = Parallel(n_jobs=n_jobs)(
                         delayed(ALL_FUNCSIM_MEASURES[measure])(predictions[pair[0]], predictions[pair[1]])
                         for pair in prediction_pairs
                     )
                 elif measure in PERFORMANCE_BASED_FUNCTIONAL_SIMILARITY_MEASURES:
-                    results[clf_name][measure][dimension] = Parallel(n_jobs=n_jobs)(
+                    results[clf_name][measure][dim_key] = Parallel(n_jobs=n_jobs)(
                         delayed(ALL_FUNCSIM_MEASURES[measure])(
                             predictions[pair[0]], predictions[pair[1]], accuracies[pair[0]], accuracies[pair[1]]
                         )
                         for pair in prediction_pairs
                     )
                 elif measure in GROUPWISE_FUNCTIONAL_SIMILARITY_MEASURES:
-                    results[clf_name][measure][dimension] = ALL_FUNCSIM_MEASURES[measure](predictions)
+                    results[clf_name][measure][dim_key] = ALL_FUNCSIM_MEASURES[measure](predictions)
 
     print("Saving resulting similarity scores...")
     with open(results_file_path, "w") as f:
@@ -187,6 +238,7 @@ def analyze_control_stability(
         results = dict()
 
     prediction_pairs = list(combinations(range(EXPERIMENTS_NUM_DOWNSTREAM_CLF_RUNS), 2))
+    expected_output_dim = _infer_expected_output_dim(dataset_params)
 
     for clf_name in classifiers:
         if clf_name not in results.keys():
@@ -225,7 +277,7 @@ def analyze_control_stability(
                     emb_key = str(emb_id)
                     if negative_sampling:
                         predictions = [
-                            np.load(
+                            _load_functional_output(
                                 osp.join(
                                     results_dir,
                                     DOWNSTREAM_PREDICTIONS_FILENAME(
@@ -233,7 +285,8 @@ def analyze_control_stability(
                                         model_seed=EXPERIMENTS_DEFAULT_SEED,
                                         negative_sampling_seed=ns_seed,
                                     ),
-                                )
+                                ),
+                                expected_output_dim=expected_output_dim,
                             )
                             for ns_seed in range(EXPERIMENTS_NUM_DOWNSTREAM_CLF_RUNS)
                         ]
@@ -243,11 +296,12 @@ def analyze_control_stability(
                         ]
                     else:
                         predictions = [
-                            np.load(
+                            _load_functional_output(
                                 osp.join(
                                     results_dir,
                                     DOWNSTREAM_PREDICTIONS_FILENAME(emb_id=emb_id, model_seed=model_seed),
-                                )
+                                ),
+                                expected_output_dim=expected_output_dim,
                             )
                             for model_seed in range(EXPERIMENTS_NUM_DOWNSTREAM_CLF_RUNS)
                         ]

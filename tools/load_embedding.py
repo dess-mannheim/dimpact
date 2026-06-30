@@ -85,7 +85,7 @@ def get_embedding_vectors(model, data, algorithm, device):
 def load_embedding(dimension, embedding_config=None, dataset_params=None, data=None, iteration=None, algorithm=None):
 
     load_path = CREATE_MODELS_PATH(dataset_params=dataset_params, embedding_name=algorithm, embedding_dim=dimension)
-    if algorithm in [SDNE, ASNE, VERSE, NODE2VEC]:
+    if algorithm in [ASNE, VERSE, NODE2VEC]:
         embedding = np.load(osp.join(load_path, EMBEDDING_FILE_NAME(iteration)))
         return embedding
 

@@ -3,9 +3,7 @@ import os.path as osp
 
 import numpy as np
 from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
 from sklearn.metrics import accuracy_score, f1_score  # , precision_score
-from sklearn.svm import SVC
 from sklearn.neural_network import MLPClassifier
 from typing import Dict, List, Literal, Final, Tuple, get_args, Any, Callable
 
@@ -16,60 +14,68 @@ DATASET = Literal[
     "blogcatalog",
     "coauthor",
     "ppi",
-    "flickr",
     "PubMed",
-    "CiteSeer",
     "facebook",
     "ogbl_ddi",
     "barabasi-albert",
-    "erdos-renyi",
     "watts-strogatz",
-    "holme-king",
 ]
 
 WIKIPEDIA: Final[DATASET] = "wiki"
 CORA: Final[DATASET] = "Cora"
 BLOGCATALOG: Final[DATASET] = "blogcatalog"
 COAUTHOR: Final[DATASET] = "coauthor"
-FLICKR: Final[DATASET] = "flickr"
 PUBMED: Final[DATASET] = "PubMed"
-CITESEER: Final[DATASET] = "CiteSeer"
 FACEBOOK: Final[DATASET] = "facebook"
 DDI: Final[DATASET] = "ogbl_ddi"
 BARABASI_ALBERT: Final[DATASET] = "barabasi-albert"
-ERDOS_RENYI: Final[DATASET] = "erdos-renyi"
 WATTS_STROGATZ: Final[DATASET] = "watts-strogatz"
-HOLME_KING: Final[DATASET] = "holme-king"
 
 DATASET_LIST: Final[List[DATASET]] = list(get_args(DATASET))
 EMPIRICAL_DATASET_LIST: Final[List[DATASET]] = [
     CORA,
-    CITESEER,
     PUBMED,
     WIKIPEDIA,
     FACEBOOK,
     BLOGCATALOG,
-    FLICKR,
+    DDI,
+    COAUTHOR,
+]
+EXPERIMENTS_DATASET_LIST: Final[List[DATASET]] = [
+    CORA,
+    PUBMED,
+    WIKIPEDIA,
+    FACEBOOK,
+    BLOGCATALOG,
     DDI,
     COAUTHOR,
 ]
 DATASET_RENAME_DICT: Final[Dict[DATASET, str]] = {
     CORA: "Cora",
-    CITESEER: "CiteSeer",
     PUBMED: "PubMed",
     WIKIPEDIA: "Wikipedia",
     BLOGCATALOG: "BlogCatalog",
     FACEBOOK: "Facebook",
-    FLICKR: "Flickr",
     DDI: "OGBL-DDI",
     COAUTHOR: "CoAuthor",
 }
 
 
-SYNTHETIC_DATASET_LIST: Final[List[DATASET]] = [ERDOS_RENYI, WATTS_STROGATZ, BARABASI_ALBERT, HOLME_KING]
+SYNTHETIC_DATASET_LIST: Final[List[DATASET]] = [
+    WATTS_STROGATZ,
+    BARABASI_ALBERT,
+]
 
-DEFAULT_DATASET_LIST: Final[List[DATASET]] = [CORA, PUBMED, WIKIPEDIA, FACEBOOK, BLOGCATALOG, DDI, COAUTHOR]
-PLANETOID_DATASETS: Final[List[DATASET]] = [CORA, CITESEER, PUBMED]
+DEFAULT_DATASET_LIST: Final[List[DATASET]] = [
+    CORA,
+    PUBMED,
+    WIKIPEDIA,
+    FACEBOOK,
+    BLOGCATALOG,
+    DDI,
+    COAUTHOR,
+]
+PLANETOID_DATASETS: Final[List[DATASET]] = [CORA, PUBMED]
 
 SUBSAMPLED_DATA_DIR_NAME: Final[str] = "sampled"
 
@@ -77,7 +83,7 @@ DATA_EDGE_LIST_DEFAULT_FILE_NAME: Final[str] = "edges.txt"
 DATA_FEATURE_MATRIX_DEFAULT_FILE_NAME: Final[str] = "features.npy"
 
 # EMBEDDINGS ALGORITHMS
-EMBEDDING_ALGORITHM = Literal["graphsage", "node2vec", "dgi", "verse", "asne", "sdne"]
+EMBEDDING_ALGORITHM = Literal["graphsage", "node2vec", "dgi", "verse", "asne"]
 
 GRAPHSAGE: Final[EMBEDDING_ALGORITHM] = "graphsage"
 NODE2VEC: Final[EMBEDDING_ALGORITHM] = "node2vec"
@@ -85,21 +91,17 @@ DGI: Final[EMBEDDING_ALGORITHM] = "dgi"
 VERSE: Final[EMBEDDING_ALGORITHM] = "verse"
 ASNE: Final[EMBEDDING_ALGORITHM] = "asne"
 
-SDNE: Final[EMBEDDING_ALGORITHM] = "sdne"
-
 EMBEDDING_ALGORITHM_RENAME_DICT: Final[Dict[EMBEDDING_ALGORITHM, str]] = {
     GRAPHSAGE: "GraphSAGE",
     NODE2VEC: NODE2VEC,
     DGI: "DGI",
     VERSE: "VERSE",
     ASNE: "ASNE",
-    SDNE: "SDNE",
 }
 
 EMBEDDING_ALGORITHM_LIST: Final[List[EMBEDDING_ALGORITHM]] = list(get_args(EMBEDDING_ALGORITHM))
 
 DEFAULT_ENVIRONMENT_NAME: Final[str] = "dimpact"
-GEM_ENVIRONMENT_NAME: Final[str] = "tf2"
 GRAPE_ENVIRONMENT_NAME: Final[str] = "grape"
 KARATECLUB_ENVIRONMENT_NAME: Final[str] = "karateclub"
 
@@ -107,13 +109,11 @@ ENVIRONMENTS_DICT: Final[Dict[EMBEDDING_ALGORITHM, str]] = {
     NODE2VEC: GRAPE_ENVIRONMENT_NAME,
     GRAPHSAGE: DEFAULT_ENVIRONMENT_NAME,
     DGI: DEFAULT_ENVIRONMENT_NAME,
-    SDNE: GEM_ENVIRONMENT_NAME,
     VERSE: DEFAULT_ENVIRONMENT_NAME,
     ASNE: KARATECLUB_ENVIRONMENT_NAME,
 }
 
 MODULE_NAME_DICT: Final[Dict[EMBEDDING_ALGORITHM, str]] = {
-    SDNE: "models.gem.train_sdne",
     NODE2VEC: "models.grape.node2vec",
     DGI: "models.pyg.dgi_inductive",
     GRAPHSAGE: "models.pyg.graphsage",
@@ -137,7 +137,6 @@ EXPERIMENTS_NUM_DOWNSTREAM_CLF_RUNS: Final[int] = 5
 EXPERIMENTS_NUM_CLF_CONTROL_EMBEDDINGS: Final[int] = 5
 EXPERIMENTS_NUM_SYNTH_ITERATIONS: Final[int] = 10
 EXPERIMENTS_DEFAULT_SEED: Final[int] = 2025
-EXPERIMENTS_DEFAULT_NEG_EDGES_FACTOR: Final[int] = 1
 
 # KEYS FOR CONFIG FILES:
 CONFIG_EMBEDDING_NAME_KEY: Final[str] = "embedding"
@@ -149,32 +148,69 @@ CONFIG_SYNTH_DATA_DENSITY_KEY: Final[str] = "density"
 CONFIG_DATA_SAMPLING_SEED_KEY: Final[str] = "sampling_seed"
 CONFIG_DIMENSION_KEY: Final[str] = "dimension"
 CONFIG_ITERATIONS_KEY: Final[str] = "iterations"
+CONFIG_TRAINING_SEEDS_KEY: Final[str] = "training_seeds"
+
+# KEYS FOR DOWNSTREAM TASK METADATA FILES:
+DATASET_METADATA_TASK_KEY: Final[str] = "task"
+DATASET_METADATA_NUM_CLASSES_KEY: Final[str] = "num_classes"
+DATASET_METADATA_CLASS_LABELS_KEY: Final[str] = "class_labels"
 
 # SYNTHETIC DATA EXPERIMENT CONFIGURATIONS
 SYNTH_DATA_EXPERIMENTS_NUM_SEEDS: Final[int] = 10
 WATTS_STROGATZ_DEFAULT_REWIRING_PROBABILITY: Final[float] = 0.1
 SYNTH_DATA_EXPERIMENTS_DEFAULT_NUM_NODES: Final[int] = 1600
 SYNTH_DATA_EXPERIMENTS_DEFAULT_DENSITY: Final[float] = 0.01
-SYNTH_DATA_EXPERIMENTS_NUM_NODES_LIST: Final[List[int]] = [200, 400, 800, 1600, 3200, 6400, 12800]
-SYNTH_DATA_EXPERIMENTS_DENSITIES_LIST: Final[List[float]] = [0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1]
+SYNTH_DATA_EXPERIMENTS_NUM_NODES_LIST: Final[List[int]] = [
+    200,
+    400,
+    800,
+    1600,
+    3200,
+    6400,
+    12800,
+]
+SYNTH_DATA_EXPERIMENTS_DENSITIES_LIST: Final[List[float]] = [
+    0.001,
+    0.002,
+    0.005,
+    0.01,
+    0.02,
+    0.05,
+    0.1,
+]
 
 
 # PARAMETER GRIDS FOR TUNING OF EMBEDDINGS
 TUNING_PARAM_GRID_DICT: Final[Dict[EMBEDDING_ALGORITHM, Dict[str, List[Any]]]] = {
-    NODE2VEC: {"walk_length": [50, 80, 100], "context_size": [5, 10, 20], "p": [0.5, 1, 2], "q": [0.5, 1, 2]},
+    NODE2VEC: {
+        "walk_length": [50, 80, 100],
+        "context_size": [5, 10, 20],
+        "p": [0.5, 1, 2],
+        "q": [0.5, 1, 2],
+    },
     DGI: {"num_layers": [2, 3, 4, 5]},
     GRAPHSAGE: {"num_layers": [2, 3, 4, 5]},
-    SDNE: {
-        "nu": [10.0**i for i in range(-5, 5, 1)],
-        "alpha": [10.0**i for i in range(-5, 6, 1)],
-        "beta": [10.0**i for i in range(0, 6, 1)],
-    },
     VERSE: {
         "alpha": [0.7, 0.8, 0.85, 0.9],
         "n_neg_samples": [1, 2, 3, 4, 5],
     },
-    ASNE: {"down_sampling": [0.01, 0.001, 0.0001, 0.00001]},
+    ASNE: {"down_sampling": [0, 1e-5, 1e-4, 1e-3]},
 }
+
+DATASET_SPECIFIC_PARAM_DICT: Dict[EMBEDDING_ALGORITHM, Dict[DATASET, Dict[str, Any]]] = {
+    method: {dataset: dict() for dataset in EMPIRICAL_DATASET_LIST} for method in EMBEDDING_ALGORITHM_LIST
+}
+DATASET_SPECIFIC_PARAM_DICT[DGI][COAUTHOR]["max_sampled_nodes_per_batch"] = 100_000
+
+
+SYNTH_DATASET_SPECIFIC_PARAM_DICT: Dict[EMBEDDING_ALGORITHM, Dict[DATASET, Dict[int, Dict[str, Any]]]] = {
+    method: {
+        dataset: {num_nodes: dict() for num_nodes in SYNTH_DATA_EXPERIMENTS_NUM_NODES_LIST}
+        for dataset in SYNTHETIC_DATASET_LIST
+    }
+    for method in EMBEDDING_ALGORITHM_LIST
+}
+SYNTH_DATASET_SPECIFIC_PARAM_DICT[DGI][WATTS_STROGATZ][12800]["max_sampled_nodes_per_batch"] = 100_000
 
 # TUNING SUMMARY CAN BE DONE BOTH FOR EMBEDDINGS AND FOR DOWNSTREAM CLASSIFIERS
 TUNING_DEFAULT_DIMENSION: Final[int] = 128
@@ -193,26 +229,20 @@ DOWNSTREAM_TASKS: Final[List[DOWNSTREAM_TASK]] = list(get_args(DOWNSTREAM_TASK))
 
 DATASET_TASK_DICT: Final[Dict[DATASET, DOWNSTREAM_TASK]] = {
     CORA: NODE_CLASSIFICATION,
-    CITESEER: NODE_CLASSIFICATION,
     PUBMED: NODE_CLASSIFICATION,
     WIKIPEDIA: NODE_CLASSIFICATION,
     BLOGCATALOG: NODE_CLASSIFICATION,
     FACEBOOK: NODE_CLASSIFICATION,
     COAUTHOR: LINK_PREDICTION,
     DDI: LINK_PREDICTION,
-    ERDOS_RENYI: GRAPH_RECONSTRUCTION,
     BARABASI_ALBERT: GRAPH_RECONSTRUCTION,
     WATTS_STROGATZ: GRAPH_RECONSTRUCTION,
-    HOLME_KING: GRAPH_RECONSTRUCTION,
 }
 
-DOWNSTREAM_CLASSIFIER = Literal["LogisticRegression", "RandomForest", "SVM", "MLP", "AdaBoost"]
+DOWNSTREAM_CLASSIFIER = Literal["LogisticRegression", "MLP"]
 
 LOGISTIC_REGRESSION: Final[DOWNSTREAM_CLASSIFIER] = "LogisticRegression"
-RANDOM_FOREST: Final[DOWNSTREAM_CLASSIFIER] = "RandomForest"
-SVM_CLASSIFIER: Final[DOWNSTREAM_CLASSIFIER] = "SVM"
 MULTILAYER_PERCEPTRON: Final[DOWNSTREAM_CLASSIFIER] = "MLP"
-ADABOOST_CLASSIFIER: Final[DOWNSTREAM_CLASSIFIER] = "AdaBoost"
 
 DOWNSTREAM_CLASSIFIERS: Final[List[DOWNSTREAM_CLASSIFIER]] = list(get_args(DOWNSTREAM_CLASSIFIER))
 
@@ -238,11 +268,9 @@ DOWNSTREAM_LP_CACHE_DISABLE_DIMENSION_THRESHOLD_DEFAULT: Final[int] = 1000
 
 NODE_CLASSIFICATION_DEFAULT_TRAINING_RATIO: Final[float] = 0.7
 NODE_CLASSIFICATION_DEFAULT_VALIDATION_RATIO: Final[float] = 0.1
-NODE_CLASSIFICATION_DEFAULT_TEST_RATIO: Final[float] = 0.2
 
 GRAPH_RECONSTRUCTION_DEFAULT_TRAINING_RATIO: Final[float] = 0.4
 GRAPH_RECONSTRUCTION_DEFAULT_VALIDATION_RATIO: Final[float] = 0.3
-GRAPH_RECONSTRUCTION_DEFAULT_TEST_RATIO: Final[float] = 0.3
 
 
 DOWNSTREAM_TASK_DATA_TRAIN_CATEGORY: Final[str] = "train"
@@ -263,19 +291,6 @@ DOWNSTREAM_TASK_DATA_NC_COLUMN_NAMES: Final[List[str]] = [
     DOWNSTREAM_TASK_DATA_LABEL_COL_KEY,
 ]
 
-# Parameters for classifiers
-SVC_BASE_PARAMS: Final[Dict[str, Any]] = {"kernel": "linear"}
-SVC_TUNING_PARAMS: Final[Dict[str, List[float]]] = {"C": [10.0**i for i in np.arange(-2, 7, step=1)]}
-
-RF_BASE_PARAMS: Final[Dict[str, Any]] = {"n_estimators": 100}
-RF_TUNING_PARAMS: Final[Dict[str, List[int]]] = {
-    "max_features": [2**i for i in range(1, 11, 1)],
-    "min_samples_leaf": [2**i for i in range(0, 7, 1)],
-}
-
-AB_BASE_PARAMS: Final[Dict[str, Any]] = {"n_estimators": 50}
-AB_TUNING_PARAMS: Final[Dict[str, List[float]]] = {"learning_rate": [10.0**i for i in range(-10, 1, 1)]}
-
 LR_BASE_PARAMS: Final[Dict[str, Any]] = {"max_iter": 1000}
 LR_TUNING_PARAMS: Final[Dict[str, List[float]]] = {"C": [10.0**i for i in range(-8, 6, 1)]}
 
@@ -293,27 +308,13 @@ DOWNSTREAM_CLASSIFIER_DICT: Final[Dict[DOWNSTREAM_CLASSIFIER, Dict[str, Any]]] =
         DOWNSTREAM_CLASSIFIER_DICT_BASE_PARAMS_KEY: LR_BASE_PARAMS,
         DOWNSTREAM_CLASSIFIER_DICT_TUNING_PARAMS_KEY: LR_TUNING_PARAMS,
     },
-    RANDOM_FOREST: {
-        DOWNSTREAM_CLASSIFIER_DICT_CLF_KEY: RandomForestClassifier,
-        DOWNSTREAM_CLASSIFIER_DICT_BASE_PARAMS_KEY: RF_BASE_PARAMS,
-        DOWNSTREAM_CLASSIFIER_DICT_TUNING_PARAMS_KEY: RF_TUNING_PARAMS,
-    },
     MULTILAYER_PERCEPTRON: {
         DOWNSTREAM_CLASSIFIER_DICT_CLF_KEY: MLPClassifier,
         DOWNSTREAM_CLASSIFIER_DICT_BASE_PARAMS_KEY: MLP_BASE_PARAMS,
         DOWNSTREAM_CLASSIFIER_DICT_TUNING_PARAMS_KEY: MLP_TUNING_PARAMS,
     },
-    SVM_CLASSIFIER: {
-        DOWNSTREAM_CLASSIFIER_DICT_CLF_KEY: SVC,
-        DOWNSTREAM_CLASSIFIER_DICT_BASE_PARAMS_KEY: SVC_BASE_PARAMS,
-        DOWNSTREAM_CLASSIFIER_DICT_TUNING_PARAMS_KEY: SVC_TUNING_PARAMS,
-    },
-    ADABOOST_CLASSIFIER: {
-        DOWNSTREAM_CLASSIFIER_DICT_CLF_KEY: AdaBoostClassifier,
-        DOWNSTREAM_CLASSIFIER_DICT_BASE_PARAMS_KEY: AB_BASE_PARAMS,
-        DOWNSTREAM_CLASSIFIER_DICT_TUNING_PARAMS_KEY: AB_TUNING_PARAMS,
-    },
 }
+
 
 MLP_LAYER_DICT: Final[Dict[int, Tuple[int, ...]]] = {
     4: (4,),
@@ -384,18 +385,13 @@ def DIMENSION_SUBDIR_NAME(dimension: int) -> str:
 CONFIG_DEFAULTS_FILE_NAME: Final[str] = "defaults.json"
 CONFIG_DEFAULTS_FILE_PATH: Final[str] = osp.join(CONFIGS_DIR, CONFIG_DEFAULTS_FILE_NAME)
 DOWNSTREAM_TASK_DATA_FILE_NAME: Final[str] = "downstream_task_data.csv"
+DOWNSTREAM_METADATA_JSON_FILE_NAME: Final[str] = "downstream_task_metadata.json"
 
 
 def TMP_TUNING_RESULTS_FILE_NAME(tune_id: int) -> str:
     if tune_id is None:
         return "results.json"
     return f"results_tid{tune_id}.json"
-
-
-def SDNE_MODEL_STRING(model_id: int, tune_id: int) -> str:
-    if tune_id is None:
-        return f"model_s{model_id}"
-    return f"model_s{model_id}_tid{tune_id}"
 
 
 def SAMPLED_DATA_FILE_NAME(sampling_ratio: float, seed: int, is_edge_list: bool = False) -> str:
@@ -464,7 +460,10 @@ def BUILD_DATASET_SRC_DIR(dataset_params: Dict[str, Any]) -> str:
     else:
         if dataset_params[CONFIG_DATA_SUBSAMPLING_INDICATOR_KEY]:
             return osp.join(
-                DATA_DIR, dataset_name, SUBSAMPLED_DATA_DIR_NAME, SUBSAMPLING_DATASET_SUBDIR(dataset_params)
+                DATA_DIR,
+                dataset_name,
+                SUBSAMPLED_DATA_DIR_NAME,
+                SUBSAMPLING_DATASET_SUBDIR(dataset_params),
             )
         else:
             return osp.join(DATA_DIR, dataset_name)
@@ -482,7 +481,10 @@ def BUILD_DATASET_DIR_NAME(dataset_params: Dict[str, Any]) -> str:
 
 
 def CREATE_MODELS_PATH(
-    dataset_params: Dict[str, Any], embedding_name: EMBEDDING_ALGORITHM, embedding_dim: int, b_tune: bool = False
+    dataset_params: Dict[str, Any],
+    embedding_name: EMBEDDING_ALGORITHM,
+    embedding_dim: int,
+    b_tune: bool = False,
 ) -> str:
     dataset_name = dataset_params[CONFIG_DATASET_NAME_KEY]
 
@@ -533,6 +535,11 @@ def CREATE_DOWNSTREAM_RESULTS_PATH(
 
 def CREATE_STABILITY_RESULTS_PATH(dataset_params: Dict[str, Any], embedding_name: EMBEDDING_ALGORITHM) -> str:
     dataset_name = dataset_params[CONFIG_DATASET_NAME_KEY]
-    save_dir = osp.join(STABILITY_RESULTS_DIR, embedding_name, dataset_name, BUILD_DATASET_DIR_NAME(dataset_params))
+    save_dir = osp.join(
+        STABILITY_RESULTS_DIR,
+        embedding_name,
+        dataset_name,
+        BUILD_DATASET_DIR_NAME(dataset_params),
+    )
     os.makedirs(save_dir, exist_ok=True)
     return save_dir

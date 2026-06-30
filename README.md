@@ -1,27 +1,22 @@
 # The Impact of Dimensionality on Node Embedding Stability and Performance
 
-This repository contains experiments for studying how embedding dimensionality affects:
+This repository is the companion repository for the paper
+["The Impact of Dimensionality on the Stability of Node Embeddings"](https://arxiv.org/abs/2604.08492).
+It contains the reference code for reproducing experiments on how node embedding dimensionality affects downstream 
+performance, representational stability across random seeds, and functional stability across downstream predictions.
 
-- **downstream performance** (e.g., node classification, link prediction),
-- **representational stability** (how similar embeddings are across random seeds),
-- **functional stability** (how similar downstream predictions are across random seeds).
+Below we describe the design of the repository and how to rerun our experiments.
 
-> Note: SDNE/HOPE training code lives in an external repository (`Implementation_pytorch_GEM`).
-> This repo still contains analysis tooling and result handling for SDNE/HOPE outputs.
+## 1. Scope
 
----
+This repository contains scripts to reproduce the experiment pipeline used in the paper:
 
-## 1. What this project does
+- tuning embedding hyperparameters,
+- training embeddings across dimensions and seeds,
+- evaluating downstream tasks,
+- computing representational and functional stability summaries.
 
-The project runs a full pipeline over multiple embedding methods and datasets:
-
-1. tune embedding hyperparameters,
-2. train embeddings for many dimensions and seeds,
-3. run downstream tasks,
-4. compute representational and functional stability,
-5. generate plots from stored results.
-
-Supported embedding methods in the current code include:
+The runnable embedding methods are:
 
 - `graphsage`
 - `dgi`
@@ -29,154 +24,145 @@ Supported embedding methods in the current code include:
 - `verse`
 - `asne`
 
-Core experiment defaults are centrally defined in `paths_globals.py` (dimensions, iteration counts, tasks, naming conventions, paths).
+The empirical datasets used in the reproducibility scripts are:
 
----
+- `Cora`
+- `PubMed`
+- `wiki`
+- `facebook`
+- `blogcatalog`
+- `ogbl_ddi`
+- `coauthor`
 
-## 2. Repository structure (current)
+The synthetic graph families used in the reproducibility scripts are:
 
-- `train.py`  
-  Main training entrypoint for embeddings across datasets/dimensions.
+- `barabasi-albert`
+- `watts-strogatz`
 
-- `tune_embeddings.py`  
-  Hyperparameter tuning for embedding methods (grid search + summary persistence).
+The downstream classifiers used in the reproducibility scripts are:
 
-- `run_downstream_tasks.py`  
-  Tunes/evaluates downstream classifiers and stores predictions/performance.
+- `LogisticRegression`
+- `MLP`
 
-- `stability/representational.py`  
-  Computes representational similarity scores between embedding pairs.
+Experiment-wide defaults and path helpers are centralized in `paths_globals.py`.
 
-- `stability/functional.py`  
-  Computes functional similarity scores between downstream prediction pairs.
+## 2. Repository Structure
 
-- `models/`  
-  Embedding implementations grouped by framework/source (`pyg`, `grape`, `karateclub`, `verse`, `gem`).
+The main directories group model implementations, dataset handling, experiment utilities, and stability measures:
 
-- `tools/`  
-  Shared utilities for data loading, configuration, tuning selection, helper scripts.
-
-- `evaluation/`  
-  Plotting/report scripts that consume saved JSON outputs.
-
-- `configs/defaults.json`  
+- `configs/`  
   Default per-model training hyperparameters.
 
 - `data/`  
-  Raw/downloaded datasets and derived per-dataset artifacts.
+  Dataset code plus prepared dataset artifacts used by the pipeline.
 
-- `output/`  
-  Generated embeddings, downstream results, and stability results.
+- `envs/`  
+  Conda environment specifications for the main environment and method-specific environments.
 
----
+- `models/`  
+  Embedding implementations grouped by framework/source (`pyg`, `grape`, `karateclub`, `verse`), plus downstream classifier utilities.
 
-## 3. High-level workflow
+- `min_ge/`  
+  Code for estimating optimal embedding dimensions according to the [MinGE method](https://doi.org/10.24963/ijcai.2021/381).
 
-## Step A — Tune embedding hyperparameters
+- `stability/measures/`  
+  Representational and functional similarity measures.
 
-Run `tune_embeddings.py` first so the training stage can use best-known parameters.
+- `tools/`  
+  Shared utilities for data loading, configuration, tuning selection, embedding loading, and analysis helpers.
+
+Experiment-wide constants for names, defaults, and path construction are centralized in `paths_globals.py`.
+The main root-level scripts are the executable workflow entry points; they are introduced in the order they are used below.
+
+## 3. Workflow
+
+All workflow scripts expose their full argument list through `--help`. In the examples below, `-dim` is shown only when a restricted dimension subset is useful. If omitted, tuning uses the default tuning dimension, while training and stability scripts use the default experiment dimension grid from `paths_globals.py`. Seed defaults are also defined centrally and do not need to be passed explicitly to reproduce the default runs.
+
+### Step A - Tune Embedding Hyperparameters
+
+Run `tune_embeddings.py` before empirical training so `train.py` can load best-known parameters.
 
 Example:
 
 ```bash
-python tune_embeddings.py -a graphsage -d Cora -dim 128
+python tune_embeddings.py -a graphsage -d Cora
 ```
 
 Tuning summaries are written under `output/embeddings/.../tune/.../tuning_results.json`.
 
-## Step B — Train embeddings over dimensions
+### Step B - Train Empirical Embeddings
 
-Run `train.py` with one or more algorithms/datasets/dimensions.
+Run `train.py` with one or more algorithms, datasets, and dimensions.
 
 Example:
 
 ```bash
-python train.py -a graphsage -d Cora -dim 4 8 16 32 64 128 --n_jobs 4
+python train.py -a graphsage -d Cora --n_jobs 4
 ```
 
 Embeddings are written to `output/embeddings/<algorithm>/<dataset>/.../stability_analysis/dim_<d>/`.
 
-## Step C — Run downstream tasks
+### Step C - Train Synthetic Embeddings
 
-Evaluate embeddings for performance and generate prediction files used in functional stability.
+Synthetic graph experiments use `train_synth_embeddings.py`.
 
 Example:
 
 ```bash
-python run_downstream_tasks.py -a graphsage -d Cora -dim 4 8 16 32 64 128 --n_jobs 4
+python train_synth_embeddings.py -a graphsage -d watts-strogatz --n_jobs 4
+```
+
+### Step D - Run Downstream Tasks
+
+Evaluate embeddings for downstream performance and generate prediction files used in functional stability.
+
+Example:
+
+```bash
+python run_downstream_tasks.py -a graphsage -d Cora -c LogisticRegression MLP --n_jobs 4
 ```
 
 Results are written under `output/downstream_results/...`.
 
-## Step D — Compute representational stability
+### Step E - Compute Representational Stability
 
 Example:
 
 ```bash
-python stability/representational.py -a graphsage -d Cora -dim 4 8 16 32 64 128 --n_jobs 4
+python stability/representational.py -a graphsage -d Cora --n_jobs 4
 ```
 
 Results are written to `output/stability_results/<algorithm>/<dataset>/.../stability_results_representational.json`.
 
-## Step E — Compute functional stability
+### Step F - Compute Functional Stability
 
 Example:
 
 ```bash
-python stability/functional.py -a graphsage -d Cora -c LogisticRegression MLP -dim 4 8 16 32 64 128 --n_jobs 4
+python stability/functional.py -a graphsage -d Cora -c LogisticRegression MLP --n_jobs 4
 ```
 
 Results are written to `output/stability_results/<algorithm>/<dataset>/.../stability_results_functional.json`.
 
----
+## 4. Setup Notes
 
-## 4. Important concepts to understand first
+- `envs/dimpact.yml` records the reference environment used for the main code path. It should be treated as a reproducibility reference; on other machines or future package distributions, individual dependency versions may need adjustment.
+- `node2vec` is launched through a separate `grape` environment, and `asne` through a separate `karateclub` environment. YAML files for both method-specific environments are provided in `envs/`.
+- `verse` uses C++ sources under `models/verse/src/`, which need to be compiled before running VERSE experiments. The included code follows the reference implementation at <https://github.com/xgfs/verse>.
+- First dataset load may trigger dataset preparation or download, depending on the dataset.
+- Large sweeps can be CPU/RAM intensive; use `--n_jobs` conservatively.
 
-If you are new to this codebase, learn in this order:
+## Citation
 
-1. **`paths_globals.py`**
-   - dataset/model names,
-   - experiment defaults (dimensions, iteration counts),
-   - task mapping per dataset,
-   - output path construction functions.
+If you use this repository or build on the experiments, please cite:
 
-2. **`tools/data_utils.py`**
-   - how datasets are loaded,
-   - how downstream split files are generated,
-   - empirical vs synthetic dataset flow.
-
-3. **`train.py`**
-   - orchestration over seeds/dimensions,
-   - method-specific training branches,
-   - model/embedding persistence.
-
-4. **`run_downstream_tasks.py` + `stability/*.py`**
-   - how performance and stability are actually measured,
-   - where predictions and summary JSON files are consumed.
-
----
-
-## 5. Environment notes
-
-- The code expects Python packages from the project environment (PyTorch, PyG, scikit-learn, etc.).
-- Some embedding methods are launched through separate environments via subprocess logic.
-- First dataset load may trigger automatic download depending on the dataset.
-
----
-
-## 6. Common output locations
-
-- Embeddings: `output/embeddings/`
-- Downstream metrics/predictions: `output/downstream_results/`
-- Stability analysis JSON files: `output/stability_results/`
-- Plots: usually under `plots/` (depending on plotting script)
-
----
-
-## 7. Reproducibility tips
-
-- Keep algorithm, dataset, dimension list, and seed-related defaults fixed when comparing runs.
-- Run tuning before large training sweeps.
-- Verify that downstream predictions exist before running functional stability.
-- For large sweeps, use `--n_jobs` conservatively to avoid CPU/RAM oversubscription.
-
+```bibtex
+@online{schumacher_impact_2026,
+  title = {The Impact of Dimensionality on the Stability of Node Embeddings},
+  author = {Schumacher, Tobias and Reichelt, Simon and Strohmaier, Markus},
+  eprint = {2604.08492},
+  eprinttype = {arXiv},
+  doi = {10.48550/arXiv.2604.08492},
+  url = {https://arxiv.org/abs/2604.08492}
+}
+```

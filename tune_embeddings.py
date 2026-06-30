@@ -64,7 +64,7 @@ def tune_grid_search(
     )
 
     config[CONFIG_DIMENSION_KEY] = embedding_dim
-    config[CONFIG_ITERATIONS_KEY] = TUNING_DEFAULT_ITERATIONS if embedding_method != SDNE else 1
+    config[CONFIG_ITERATIONS_KEY] = TUNING_DEFAULT_ITERATIONS
     tuning_results_file_path = os.path.join(save_dir, TUNING_SUMMARY_FILE_NAME)
 
     if os.path.isfile(tuning_results_file_path) and not overwrite:
@@ -112,10 +112,7 @@ if __name__ == "__main__":
 
             print(algorithm)
             pspace = list(ParameterGrid(TUNING_PARAM_GRID_DICT[algorithm]))
-            if args.dimensions is None:
-                dimensions_list = [TUNING_DEFAULT_DIMENSION] if algorithm != SDNE else EXPERIMENTS_DIMENSIONS_LIST
-            else:
-                dimensions_list = args.dimensions
+            dimensions_list = [TUNING_DEFAULT_DIMENSION] if args.dimensions is None else args.dimensions
 
             for dim in dimensions_list:
 

@@ -72,6 +72,7 @@ def train_model(
             downstream_df=downstream_df,
             edge_list=edge_list_path,
             embedding=embedding,
+            seed=seed,
             return_val_data=True,
         )
     else:

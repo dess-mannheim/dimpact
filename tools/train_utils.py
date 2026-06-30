@@ -39,6 +39,20 @@ def _sample_negative_edges(
     return np.array(negatives, dtype=np.int64)
 
 
+def build_link_prediction_edge_features(
+    src_embeddings: np.ndarray,
+    dst_embeddings: np.ndarray,
+    feature_op: str = "hadamard",
+) -> np.ndarray:
+    if feature_op == "hadamard":
+        features = src_embeddings * dst_embeddings
+    elif feature_op == "concat":
+        features = np.hstack((src_embeddings, dst_embeddings))
+    else:
+        raise ValueError(f"Unknown link prediction feature operation: {feature_op}")
+    return features.astype(np.float32, copy=False)
+
+
 def prepare_link_prediction_data(
     downstream_df: pd.DataFrame,
     edge_list: str | List[Tuple[int, int]] | np.ndarray,
@@ -46,6 +60,8 @@ def prepare_link_prediction_data(
     seed: int = EXPERIMENTS_DEFAULT_SEED,
     return_val_data: bool = False,
     return_test_data: bool = False,
+    feature_op: str = "hadamard",
+    train_pos_sample_ratio: float = 1.0,
 ) -> Union[
     Tuple[np.ndarray, np.ndarray],
     Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
@@ -65,7 +81,14 @@ def prepare_link_prediction_data(
     else:
         pos_train_edges = all_edges
 
+    if not (0 < train_pos_sample_ratio <= 1.0):
+        raise ValueError("train_pos_sample_ratio must be in (0, 1].")
+
     rng = np.random.RandomState(seed)
+    if train_pos_sample_ratio < 1.0 and len(pos_train_edges) > 0:
+        n_pos = max(1, int(len(pos_train_edges) * train_pos_sample_ratio))
+        sampled_idx = rng.permutation(len(pos_train_edges))[:n_pos]
+        pos_train_edges = pos_train_edges[sampled_idx]
     neg_train_edges = _sample_negative_edges(
         all_edges=all_edges,
         num_samples=len(pos_train_edges),
@@ -81,8 +104,11 @@ def prepare_link_prediction_data(
     shuffle_idx = np.arange(len(train_edges), dtype=int)
     np.random.RandomState(seed).shuffle(shuffle_idx)
 
-    X_train = np.hstack((embedding[train_edges[:, 0]], embedding[train_edges[:, 1]]))[shuffle_idx]
-    X_train = X_train.astype(np.float32, copy=False)
+    X_train = build_link_prediction_edge_features(
+        embedding[train_edges[:, 0]],
+        embedding[train_edges[:, 1]],
+        feature_op=feature_op,
+    )[shuffle_idx]
     y_train = np.hstack((np.ones(len(pos_train_edges), dtype=np.int8), np.zeros(len(neg_train_edges), dtype=np.int8)))[
         shuffle_idx
     ]
@@ -93,13 +119,11 @@ def prepare_link_prediction_data(
         val_data = downstream_df.loc[
             downstream_df.loc[:, DOWNSTREAM_TASK_DATA_SPLIT_COL_KEY] == DOWNSTREAM_TASK_DATA_VAL_CATEGORY
         ]
-        X_val = np.hstack(
-            (
-                embedding[val_data[DOWNSTREAM_TASK_DATA_SRC_EDGE_COL_KEY].to_numpy()],
-                embedding[val_data[DOWNSTREAM_TASK_DATA_DEST_EDGE_COL_KEY].to_numpy()],
-            )
+        X_val = build_link_prediction_edge_features(
+            embedding[val_data[DOWNSTREAM_TASK_DATA_SRC_EDGE_COL_KEY].to_numpy()],
+            embedding[val_data[DOWNSTREAM_TASK_DATA_DEST_EDGE_COL_KEY].to_numpy()],
+            feature_op=feature_op,
         )
-        X_val = X_val.astype(np.float32, copy=False)
 
         y_val = val_data[DOWNSTREAM_TASK_DATA_LABEL_COL_KEY].to_numpy(dtype=np.int8, copy=False)
 
@@ -109,13 +133,11 @@ def prepare_link_prediction_data(
         test_data = downstream_df.loc[
             downstream_df.loc[:, DOWNSTREAM_TASK_DATA_SPLIT_COL_KEY] == DOWNSTREAM_TASK_DATA_TEST_CATEGORY
         ]
-        X_test = np.hstack(
-            (
-                embedding[test_data[DOWNSTREAM_TASK_DATA_SRC_EDGE_COL_KEY].to_numpy()],
-                embedding[test_data[DOWNSTREAM_TASK_DATA_DEST_EDGE_COL_KEY].to_numpy()],
-            )
+        X_test = build_link_prediction_edge_features(
+            embedding[test_data[DOWNSTREAM_TASK_DATA_SRC_EDGE_COL_KEY].to_numpy()],
+            embedding[test_data[DOWNSTREAM_TASK_DATA_DEST_EDGE_COL_KEY].to_numpy()],
+            feature_op=feature_op,
         )
-        X_test = X_test.astype(np.float32, copy=False)
 
         y_test = test_data[DOWNSTREAM_TASK_DATA_LABEL_COL_KEY].to_numpy(dtype=np.int8, copy=False)
 
@@ -130,6 +152,9 @@ def iter_link_prediction_train_batches(
     embedding: np.ndarray,
     batch_size: int,
     seed: int = EXPERIMENTS_DEFAULT_SEED,
+    feature_op: str = "hadamard",
+    train_pos_sample_ratio: float = 1.0,
+    resample_negative_per_epoch: bool = False,
 ):
     """Yield mini-batches (X_batch, y_batch) for LP training without materializing full X_train."""
 
@@ -160,19 +185,40 @@ def iter_link_prediction_train_batches(
     else:
         pos_train_edges = all_edges
 
+    if not (0 < train_pos_sample_ratio <= 1.0):
+        raise ValueError("train_pos_sample_ratio must be in (0, 1].")
+
     rng = np.random.RandomState(seed)
 
+    if train_pos_sample_ratio < 1.0 and len(pos_train_edges) > 0:
+        n_pos = max(1, int(len(pos_train_edges) * train_pos_sample_ratio))
+        sampled_idx = rng.permutation(len(pos_train_edges))[:n_pos]
+        pos_train_edges = pos_train_edges[sampled_idx]
+
     pos_idx_perm = rng.permutation(len(pos_train_edges))
+
+    # Match in-memory LR behavior by default: draw one fixed negative set for this iterator call.
+    fixed_neg_edges = None
+    if not resample_negative_per_epoch:
+        fixed_neg_edges = _sample_negative_edges(
+            all_edges=all_edges,
+            num_samples=len(pos_train_edges),
+            rng=np.random.RandomState(seed + 1),
+        )
+
     for start_idx in range(0, len(pos_idx_perm), batch_size):
         curr_pos_idx = pos_idx_perm[start_idx : start_idx + batch_size]
         pos_batch = pos_train_edges[curr_pos_idx]
         n_pos = len(pos_batch)
 
-        neg_batch = _sample_negative_edges(
-            all_edges=all_edges,
-            num_samples=n_pos,
-            rng=rng,
-        )
+        if resample_negative_per_epoch:
+            neg_batch = _sample_negative_edges(
+                all_edges=all_edges,
+                num_samples=n_pos,
+                rng=rng,
+            )
+        else:
+            neg_batch = fixed_neg_edges[curr_pos_idx]
 
         batch_edges = np.vstack((pos_batch, neg_batch))
         y_batch = np.hstack((np.ones(n_pos, dtype=np.int8), np.zeros(n_pos, dtype=np.int8)))
@@ -181,7 +227,11 @@ def iter_link_prediction_train_batches(
         batch_edges = batch_edges[shuffle_idx]
         y_batch = y_batch[shuffle_idx]
 
-        X_batch = np.hstack((embedding[batch_edges[:, 0]], embedding[batch_edges[:, 1]])).astype(np.float32, copy=False)
+        X_batch = build_link_prediction_edge_features(
+            embedding[batch_edges[:, 0]],
+            embedding[batch_edges[:, 1]],
+            feature_op=feature_op,
+        )
         yield X_batch, y_batch
 
 
@@ -189,14 +239,14 @@ def prepare_link_prediction_eval_data(
     downstream_df: pd.DataFrame,
     embedding: np.ndarray,
     split_category: str,
+    feature_op: str = "hadamard",
 ) -> Tuple[np.ndarray, np.ndarray]:
     curr_data = downstream_df.loc[downstream_df.loc[:, DOWNSTREAM_TASK_DATA_SPLIT_COL_KEY] == split_category]
-    X = np.hstack(
-        (
-            embedding[curr_data[DOWNSTREAM_TASK_DATA_SRC_EDGE_COL_KEY].to_numpy()],
-            embedding[curr_data[DOWNSTREAM_TASK_DATA_DEST_EDGE_COL_KEY].to_numpy()],
-        )
-    ).astype(np.float32, copy=False)
+    X = build_link_prediction_edge_features(
+        embedding[curr_data[DOWNSTREAM_TASK_DATA_SRC_EDGE_COL_KEY].to_numpy()],
+        embedding[curr_data[DOWNSTREAM_TASK_DATA_DEST_EDGE_COL_KEY].to_numpy()],
+        feature_op=feature_op,
+    )
     y = curr_data[DOWNSTREAM_TASK_DATA_LABEL_COL_KEY].to_numpy(dtype=np.int8, copy=False)
     return X, y
 
@@ -256,13 +306,6 @@ def get_embedding_params(config) -> Dict[str, Any]:
         params["number_of_walks"] = config.get("number_of_walks")
     elif embedding_name == DGI:
         params["learning_rate"] = config.get("learning_rate")
-    elif embedding_name == HOPE:
-        params["beta"] = config.get("beta")
-    elif embedding_name == SDNE:
-        params["beta"] = config.get("beta")
-        params["rho"] = config.get("rho")
-        params["nu"] = config.get("nu")
-        params["xeta"] = config.get("xeta")
 
     return params
 
@@ -287,49 +330,30 @@ def get_best_parameter_dict(
 ) -> Dict[int, Dict[str, Any]]:
     dataset_name = dataset_params[CONFIG_DATASET_NAME_KEY]
     parameter_dict = dict()
-    if embedding_method != SDNE:
-        if dataset_name in SYNTHETIC_DATASET_LIST:
-            tune_dir = CREATE_SYNTH_TUNING_RESULTS_PATH(
-                dataset_params=dataset_params, embedding_name=embedding_method
-            )
-        else:
-            tune_dir = CREATE_MODELS_PATH(
-                dataset_params=dataset_params,
-                embedding_name=embedding_method,
-                embedding_dim=TUNING_DEFAULT_DIMENSION,
-                b_tune=True,
-            )
-        tuning_results_file_path = osp.join(tune_dir, TUNING_SUMMARY_FILE_NAME)
-
-        if osp.isfile(tuning_results_file_path):
-            with open(tuning_results_file_path) as f:
-                tuning_summary = json.load(f)
-            tune_id_list = list(tuning_summary.keys())
-            tune_scores = list(tuning_summary[tid][TUNING_SUMMARY_SCORE_KEY] for tid in tune_id_list)
-            best_id = tune_id_list[tune_scores.index(max(tune_scores))]
-            for embedding_dim in dimensions:
-                parameter_dict[embedding_dim] = tuning_summary[best_id][TUNING_SUMMARY_PARAMS_KEY]
-        else:
-            raise FileNotFoundError(
-                f"Tuning results file does not exist - {embedding_method} still needs to be tuned"
-                f" on {dataset_name} dataset!"
-            )
+    if dataset_name in SYNTHETIC_DATASET_LIST:
+        tune_dir = CREATE_SYNTH_TUNING_RESULTS_PATH(dataset_params=dataset_params, embedding_name=embedding_method)
     else:
-        for embedding_dim in dimensions:
-            tune_dir = CREATE_MODELS_PATH(
-                dataset_params=dataset_params,
-                embedding_name=embedding_method,
-                embedding_dim=embedding_dim,
-                b_tune=True,
-            )
-            tuning_results_file_path = osp.join(tune_dir, TUNING_SUMMARY_FILE_NAME)
+        tune_dir = CREATE_MODELS_PATH(
+            dataset_params=dataset_params,
+            embedding_name=embedding_method,
+            embedding_dim=TUNING_DEFAULT_DIMENSION,
+            b_tune=True,
+        )
+    tuning_results_file_path = osp.join(tune_dir, TUNING_SUMMARY_FILE_NAME)
 
-            with open(tuning_results_file_path) as f:
-                tuning_summary = json.load(f)
-            tune_id_list = list(tuning_summary.keys())
-            tune_scores = list(tuning_summary[tid][TUNING_SUMMARY_SCORE_KEY] for tid in tune_id_list)
-            best_id = tune_id_list[tune_scores.index(max(tune_scores))]
+    if osp.isfile(tuning_results_file_path):
+        with open(tuning_results_file_path) as f:
+            tuning_summary = json.load(f)
+        tune_id_list = list(tuning_summary.keys())
+        tune_scores = list(tuning_summary[tid][TUNING_SUMMARY_SCORE_KEY] for tid in tune_id_list)
+        best_id = tune_id_list[tune_scores.index(max(tune_scores))]
+        for embedding_dim in dimensions:
             parameter_dict[embedding_dim] = tuning_summary[best_id][TUNING_SUMMARY_PARAMS_KEY]
+    else:
+        raise FileNotFoundError(
+            f"Tuning results file does not exist - {embedding_method} still needs to be tuned"
+            f" on {dataset_name} dataset!"
+        )
     return parameter_dict
 
 

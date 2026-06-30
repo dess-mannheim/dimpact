@@ -5,7 +5,7 @@ import torch_geometric
 from torch_geometric import EdgeIndex
 from torch_geometric.data import Data, InMemoryDataset, download_url
 from torch_geometric.utils import negative_sampling
-from paths_globals import EXPERIMENTS_DEFAULT_SEED
+from paths_globals import *
 
 
 def convert_coo_matrix(mat):

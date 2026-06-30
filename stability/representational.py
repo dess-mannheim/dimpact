@@ -12,6 +12,16 @@ from paths_globals import *
 # from tools.load_embedding import load_embedding
 
 
+def _compute_embedding_pair_similarity(
+    measure_name: str,
+    load_path: str,
+    pair: tuple[int, int],
+) -> float:
+    left = np.load(osp.join(load_path, EMBEDDING_FILE_NAME(model_seed=pair[0])), mmap_mode="r")
+    right = np.load(osp.join(load_path, EMBEDDING_FILE_NAME(model_seed=pair[1])), mmap_mode="r")
+    return ALL_MEASURES[measure_name](left, right, shape=ND_SHAPE)
+
+
 def parse_args():
     """Parses arguments given to script
     Returns:
@@ -118,6 +128,9 @@ def analyze_representational_stability(
     if osp.exists(results_file_path):
         with open(results_file_path, "r") as f:
             results = json.load(f)
+        for measure in measures:
+            if measure not in results.keys():
+                results[measure] = dict()
     else:
         results = {measure: dict() for measure in measures}
 
@@ -125,7 +138,8 @@ def analyze_representational_stability(
     for measure in measures:
         print(f"Compute stability with respect to {measure} measure.")
         for dimension in dimensions:
-            if str(dimension) in results[measure].keys() and not overwrite:
+            dim_key = str(dimension)
+            if dim_key in results[measure].keys() and not overwrite:
                 print(f"Stability results for dimension {dimension} already exist and overwrite is False, skipping.")
                 continue
             print(f"Embedding dimension is {dimension}")
@@ -135,24 +149,18 @@ def analyze_representational_stability(
             for k, v in params.items():
                 embedding_config[k] = v
 
-            if str(dimension) not in results[measure].keys() or overwrite:
+            if dim_key not in results[measure].keys() or overwrite:
                 load_path = CREATE_MODELS_PATH(
                     dataset_params=dataset_params, embedding_name=embedding_name, embedding_dim=dimension
                 )
-                embeddings = [
-                    np.load(osp.join(load_path, EMBEDDING_FILE_NAME(model_seed=i)))
-                    for i in range(embedding_config[CONFIG_ITERATIONS_KEY])
-                ]
-
-                results[measure][dimension] = Parallel(n_jobs=n_jobs)(
-                    delayed(ALL_MEASURES[measure])(embeddings[pair[0]], embeddings[pair[1]], shape=ND_SHAPE)
-                    for pair in embedding_pairs
+                results[measure][dim_key] = Parallel(n_jobs=n_jobs)(
+                    delayed(_compute_embedding_pair_similarity)(measure, load_path, pair) for pair in embedding_pairs
                 )
-            results[measure][dimension] = [float(np_val) for np_val in results[measure][dimension]]
+            results[measure][dim_key] = [float(np_val) for np_val in results[measure][dim_key]]
 
-    print("Saving resulting similarity scores...")
-    with open(results_file_path, "w") as f:
-        json.dump(results, f)
+            print("Similarities were calculated, saving resulting similarity scores...")
+            with open(results_file_path, "w") as f:
+                json.dump(results, f)
 
 
 if __name__ == "__main__":

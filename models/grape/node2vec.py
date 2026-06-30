@@ -118,6 +118,7 @@ def train_model(
             downstream_df=downstream_df,
             edge_list=edge_list_path,
             embedding=embedding,
+            seed=seed,
             return_val_data=True,
         )
     else:
@@ -140,18 +141,18 @@ if __name__ == "__main__":
     with open(args.config_path, "r") as f:
         config = json.load(f)
 
-    iterations = config[CONFIG_ITERATIONS_KEY]
+    seeds = config.get(CONFIG_TRAINING_SEEDS_KEY, list(range(config[CONFIG_ITERATIONS_KEY])))
     overwrite = args.overwrite
 
-    print(f"Train {iterations} embeddings sequentially")
+    print(f"Train {len(seeds)} embeddings sequentially")
     scores = [
         train_model(
-            args.data_path, config, args.models_dir, args.downstream_data_path, args.tune_id, iteration, overwrite
+            args.data_path, config, args.models_dir, args.downstream_data_path, args.tune_id, seed, overwrite
         )
-        for iteration in range(iterations)
+        for seed in seeds
     ]
 
-    results_dict = {i: score for i, score in enumerate(scores)}
+    results_dict = {seed: score for seed, score in zip(seeds, scores)}
 
     with open(os.path.join(args.models_dir, TMP_TUNING_RESULTS_FILE_NAME(args.tune_id)), "w") as f:
         json.dump(results_dict, f)
