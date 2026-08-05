@@ -18,6 +18,7 @@ data/**/*.npy
 data/**/*.bcsr
 data/**/*.txt
 data/**/downstream_task_data.csv
+data/**/downstream_task_metadata.json
 models/verse/src/*
 output/**/*.emb
 output/**/*.pt
@@ -25,6 +26,13 @@ output/**/*.npy
 output/**/*.h5
 output/**/dec_model*
 output/**/enc_model*
+output/plots/*
+output/tables/*
+output/embedding_costs/*
+output/hyperparameter_sensitivity/*
+output/stability_performance_bootstrap/*
+case_studies/output/
+paper/*
 latex/*
 jobs/*
 shell_scripts/*

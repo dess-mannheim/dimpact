@@ -1,5 +1,5 @@
 import torch
-from torch_geometric.nn import DeepGraphInfomax, GraphSAGE, Node2Vec
+from torch_geometric.nn import DeepGraphInfomax, GraphSAGE
 from tools import train_utils
 from models.pyg.dgi_inductive import Encoder as DGIEncoder
 from models.pyg.dgi_inductive import corruption as corruption_dgi
@@ -46,18 +46,6 @@ def create_model(dimension, dataset, device, algorithm, embedding_config):
             hidden_channels=dimension,
             num_layers=embedding_config["num_layers"],
         ).to(device)
-    elif algorithm == NODE2VEC:
-        model = Node2Vec(
-            dataset.edge_index,
-            embedding_dim=dimension,
-            walk_length=embedding_config["walk_length"],
-            context_size=embedding_config["context_size"],
-            walks_per_node=embedding_config["walks_per_node"],
-            num_negative_samples=embedding_config["num_negative_samples"],
-            p=embedding_config["p"],
-            q=embedding_config["q"],
-            sparse=bool(embedding_config["sparse"]),
-        ).to(device)
     else:
         raise ValueError("Check algorithm name")
     return model
@@ -75,9 +63,6 @@ def get_embedding_vectors(model, data, algorithm, device):
     elif algorithm == GRAPHSAGE:
         with torch.no_grad():
             embedding = model(data.x.to(device), data.edge_index.to(device))
-    elif algorithm == NODE2VEC:
-        with torch.no_grad():
-            embedding = model()
     return embedding
 
 

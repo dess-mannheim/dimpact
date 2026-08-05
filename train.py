@@ -37,7 +37,7 @@ def parse_args() -> Namespace:
         nargs="*",
         type=str,
         choices=EMPIRICAL_DATASET_LIST,
-        default=DEFAULT_DATASET_LIST,
+        default=EMPIRICAL_DATASET_LIST,
         help="Datasets used in evaluation.",
     )
     parser.add_argument("-gpu", "--gpu_id", default=0, type=int, help="ID of GPU to use")
@@ -64,6 +64,7 @@ def train_embeddings(
     overwrite: bool = False,
     n_jobs: int = 1,
     seeds: List[int] = None,
+    save_dir: str | os.PathLike | None = None,
 ) -> Dict[int, float]:
 
     data, edge_list_path = data_utils.load_dataset(dataset_params.copy())
@@ -73,12 +74,16 @@ def train_embeddings(
     embedding_dim = embedding_config["dimension"]
     results_dict = dict()
 
-    save_dir = CREATE_MODELS_PATH(
-        dataset_params=dataset_params,
-        embedding_name=embedding_name,
-        embedding_dim=embedding_dim,
-        b_tune=True if tune_id is not None else False,
-    )
+    if save_dir is None:
+        save_dir = CREATE_MODELS_PATH(
+            dataset_params=dataset_params,
+            embedding_name=embedding_name,
+            embedding_dim=embedding_dim,
+            b_tune=True if tune_id is not None else False,
+        )
+    else:
+        save_dir = os.fspath(save_dir)
+        os.makedirs(save_dir, exist_ok=True)
 
     if seeds is None:
         seeds = list(range(embedding_config[CONFIG_ITERATIONS_KEY]))

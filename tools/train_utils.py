@@ -331,7 +331,9 @@ def get_best_parameter_dict(
     dataset_name = dataset_params[CONFIG_DATASET_NAME_KEY]
     parameter_dict = dict()
     if dataset_name in SYNTHETIC_DATASET_LIST:
-        tune_dir = CREATE_SYNTH_TUNING_RESULTS_PATH(dataset_params=dataset_params, embedding_name=embedding_method)
+        tune_dir = CREATE_SYNTH_TUNING_RESULTS_PATH(
+            dataset_params=dataset_params, embedding_name=embedding_method
+        )
     else:
         tune_dir = CREATE_MODELS_PATH(
             dataset_params=dataset_params,
@@ -341,19 +343,19 @@ def get_best_parameter_dict(
         )
     tuning_results_file_path = osp.join(tune_dir, TUNING_SUMMARY_FILE_NAME)
 
-    if osp.isfile(tuning_results_file_path):
-        with open(tuning_results_file_path) as f:
-            tuning_summary = json.load(f)
-        tune_id_list = list(tuning_summary.keys())
-        tune_scores = list(tuning_summary[tid][TUNING_SUMMARY_SCORE_KEY] for tid in tune_id_list)
-        best_id = tune_id_list[tune_scores.index(max(tune_scores))]
-        for embedding_dim in dimensions:
-            parameter_dict[embedding_dim] = tuning_summary[best_id][TUNING_SUMMARY_PARAMS_KEY]
-    else:
+    if not osp.isfile(tuning_results_file_path):
         raise FileNotFoundError(
             f"Tuning results file does not exist - {embedding_method} still needs to be tuned"
             f" on {dataset_name} dataset!"
         )
+
+    with open(tuning_results_file_path) as f:
+        tuning_summary = json.load(f)
+    tune_id_list = list(tuning_summary.keys())
+    tune_scores = list(tuning_summary[tid][TUNING_SUMMARY_SCORE_KEY] for tid in tune_id_list)
+    best_id = tune_id_list[tune_scores.index(max(tune_scores))]
+    for embedding_dim in dimensions:
+        parameter_dict[embedding_dim] = tuning_summary[best_id][TUNING_SUMMARY_PARAMS_KEY]
     return parameter_dict
 
 

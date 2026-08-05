@@ -44,7 +44,7 @@ def parse_args():
         nargs="*",
         type=str,
         choices=DATASET_LIST,
-        default=DEFAULT_DATASET_LIST,
+        default=EMPIRICAL_DATASET_LIST,
         help="Datasets used in evaluation.",
     )
     parser.add_argument(

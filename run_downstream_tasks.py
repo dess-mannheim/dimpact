@@ -55,7 +55,7 @@ def parse_args() -> Namespace:
         nargs="*",
         type=str,
         choices=DATASET_LIST,
-        default=DEFAULT_DATASET_LIST,
+        default=EMPIRICAL_DATASET_LIST,
         help="Datasets used in evaluation.",
     )
     parser.add_argument("-gpu", "--gpu_id", default=0, type=int, help="ID of GPU to use")
@@ -137,10 +137,10 @@ def parse_args() -> Namespace:
     parser.add_argument(
         "--lp_train_batch_size",
         type=int,
-        default=0,
+        default=None,
         help=(
             "Batch size for streamed LP training for any classifier that supports streaming. "
-            "Default 0 disables streamed training; values >0 force streamed LP training."
+            "If omitted, streamed mode is auto-enabled only for LP at high dimensions; if provided, streamed mode is always used for LP."
         ),
     )
     parser.add_argument(

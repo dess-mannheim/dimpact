@@ -31,7 +31,7 @@ def parse_args() -> Namespace:
         nargs="*",
         type=str,
         choices=DATASET_LIST,
-        default=DEFAULT_DATASET_LIST,
+        default=EMPIRICAL_DATASET_LIST,
         help="Datasets used in evaluation.",
     )
     parser.add_argument("-gpu", "--gpu_id", default=0, type=int, help="ID of GPU to use")
@@ -89,6 +89,7 @@ def tune_grid_search(
             tune_id=i,
             overwrite=overwrite,
             n_jobs=n_jobs,
+            save_dir=save_dir,
         )
         tuning_summary[str(i)] = {
             TUNING_SUMMARY_PARAMS_KEY: params,

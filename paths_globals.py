@@ -13,7 +13,6 @@ DATASET = Literal[
     "Cora",
     "blogcatalog",
     "coauthor",
-    "ppi",
     "PubMed",
     "facebook",
     "ogbl_ddi",
@@ -41,15 +40,6 @@ EMPIRICAL_DATASET_LIST: Final[List[DATASET]] = [
     DDI,
     COAUTHOR,
 ]
-EXPERIMENTS_DATASET_LIST: Final[List[DATASET]] = [
-    CORA,
-    PUBMED,
-    WIKIPEDIA,
-    FACEBOOK,
-    BLOGCATALOG,
-    DDI,
-    COAUTHOR,
-]
 DATASET_RENAME_DICT: Final[Dict[DATASET, str]] = {
     CORA: "Cora",
     PUBMED: "PubMed",
@@ -66,15 +56,6 @@ SYNTHETIC_DATASET_LIST: Final[List[DATASET]] = [
     BARABASI_ALBERT,
 ]
 
-DEFAULT_DATASET_LIST: Final[List[DATASET]] = [
-    CORA,
-    PUBMED,
-    WIKIPEDIA,
-    FACEBOOK,
-    BLOGCATALOG,
-    DDI,
-    COAUTHOR,
-]
 PLANETOID_DATASETS: Final[List[DATASET]] = [CORA, PUBMED]
 
 SUBSAMPLED_DATA_DIR_NAME: Final[str] = "sampled"
@@ -291,6 +272,7 @@ DOWNSTREAM_TASK_DATA_NC_COLUMN_NAMES: Final[List[str]] = [
     DOWNSTREAM_TASK_DATA_LABEL_COL_KEY,
 ]
 
+# Parameters for classifiers
 LR_BASE_PARAMS: Final[Dict[str, Any]] = {"max_iter": 1000}
 LR_TUNING_PARAMS: Final[Dict[str, List[float]]] = {"C": [10.0**i for i in range(-8, 6, 1)]}
 
@@ -346,6 +328,44 @@ MAX_DIMENSION_DICT[GRAPHSAGE][COAUTHOR] = 1024
 
 
 # ----------------------------------------------------------------------------------------------------------------------
+# CASE STUDY SETTINGS
+# ----------------------------------------------------------------------------------------------------------------------
+
+EMBEDDING_COSTS_CASE_STUDY_NAME: Final[str] = "embedding_costs"
+HYPERPARAMETER_SENSITIVITY_CASE_STUDY_NAME: Final[str] = "hyperparameter_sensitivity"
+STABILITY_PERFORMANCE_BOOTSTRAP_CASE_STUDY_NAME: Final[str] = "stability_performance_bootstrap"
+
+
+LP_EDGE_FEATURE_OP = Literal["hadamard", "concat"]
+
+EMBEDDING_COSTS_SUPPORTED_ALGORITHMS: Final[List[EMBEDDING_ALGORITHM]] = [
+    GRAPHSAGE,
+    NODE2VEC,
+    DGI,
+    VERSE,
+    ASNE,
+]
+EMBEDDING_COSTS_MEASUREMENT_SCOPE: Final[str] = (
+    "Existing repository embedding training call, including the validation scoring step performed by each model "
+    "implementation after the embedding is computed."
+)
+EMBEDDING_COSTS_DOWNSTREAM_MEASUREMENT_SCOPE: Final[str] = (
+    "Single downstream evaluation pass on one produced case-study embedding, using tuned downstream classifier "
+    "hyperparameters from the main downstream-results tree."
+)
+
+HYPERPARAMETER_SENSITIVITY_EMBEDDING_TRAINING_SCOPE: Final[str] = (
+    "Case-study embedding generation via the same model training entry points used by train.py, "
+    "without embedding-cost memory sampling."
+)
+
+STABILITY_PERFORMANCE_BOOTSTRAP_MAX_OUTPUT_PATH_LENGTH: Final[int] = 259
+STABILITY_PERFORMANCE_BOOTSTRAP_PERFORMANCE_CRITERION = Literal["strict_best", "threshold", "statistical"]
+STABILITY_PERFORMANCE_BOOTSTRAP_TIE_RTOL: Final[float] = 1e-12
+STABILITY_PERFORMANCE_BOOTSTRAP_TIE_ATOL: Final[float] = 1e-15
+
+
+# ----------------------------------------------------------------------------------------------------------------------
 # PATHS AND FILE NAMES
 # ----------------------------------------------------------------------------------------------------------------------
 
@@ -362,16 +382,45 @@ OUTPUT_DIR: Final[str] = os.path.join(MAIN_DIR, "output")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 EMBEDDINGS_DIR: Final[str] = os.path.join(OUTPUT_DIR, "embeddings")
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+os.makedirs(EMBEDDINGS_DIR, exist_ok=True)
 
 DOWNSTREAM_RESULTS_DIR: Final[str] = os.path.join(OUTPUT_DIR, "downstream_results")
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+os.makedirs(DOWNSTREAM_RESULTS_DIR, exist_ok=True)
 
 STABILITY_RESULTS_DIR: Final[str] = os.path.join(OUTPUT_DIR, "stability_results")
 os.makedirs(STABILITY_RESULTS_DIR, exist_ok=True)
 
+PLOTS_DIR: Final[str] = os.path.join(OUTPUT_DIR, "plots")
+os.makedirs(PLOTS_DIR, exist_ok=True)
+
+TABLES_DIR: Final[str] = os.path.join(OUTPUT_DIR, "tables")
+os.makedirs(TABLES_DIR, exist_ok=True)
+
+# CASE-STUDY OUTPUT DIRECTORIES
+EMBEDDING_COSTS_CASE_STUDY_OUTPUT_DIR: Final[str] = osp.join(OUTPUT_DIR, EMBEDDING_COSTS_CASE_STUDY_NAME)
+HYPERPARAMETER_SENSITIVITY_CASE_STUDY_OUTPUT_DIR: Final[str] = osp.join(
+    OUTPUT_DIR,
+    HYPERPARAMETER_SENSITIVITY_CASE_STUDY_NAME,
+)
+STABILITY_PERFORMANCE_BOOTSTRAP_CASE_STUDY_OUTPUT_DIR: Final[str] = osp.join(
+    OUTPUT_DIR,
+    STABILITY_PERFORMANCE_BOOTSTRAP_CASE_STUDY_NAME,
+)
+
+# SHARED OUTPUT SUBDIRECTORIES
+REPORTS_DIR_NAME: Final[str] = "reports"
+LOGS_DIR_NAME: Final[str] = "logs"
+EMBEDDINGS_DIR_NAME: Final[str] = "embeddings"
+CONFIGS_DIR_NAME: Final[str] = "configs"
+PREDICTIONS_DIR_NAME: Final[str] = "predictions"
+SUMMARIES_DIR_NAME: Final[str] = "summaries"
+DOWNSTREAM_TUNING_DIR_NAME: Final[str] = "downstream_tuning"
+HYPERPARAMETER_SENSITIVITY_STAGE1_RETUNING_DIR_NAME: Final[str] = "stage1_retuning"
+HYPERPARAMETER_SENSITIVITY_STAGE2_STABILITY_DIR_NAME: Final[str] = "stage2_stability"
+
 TUNE_DIR_NAME: Final[str] = "tune"
 STABILITY_ANALYSIS_DIR_NAME: Final[str] = "stability_analysis"
+HYPERPARAMETER_SENSITIVITY_DIMENSION_SPECIFIC_LABEL: Final[str] = "dimension_specific"
 
 VERSE_SRC_PATH: Final[str] = osp.join(MAIN_DIR, "models", "verse", "src")
 BCSR_GRAPH_FILE_NAME: Final[str] = "graph.bcsr"
@@ -381,11 +430,71 @@ def DIMENSION_SUBDIR_NAME(dimension: int) -> str:
     return f"dim_{dimension}"
 
 
+def TUNE_RUN_SUBDIR_NAME(tune_id: int) -> str:
+    return f"{TUNE_DIR_NAME}_{tune_id}"
+
+
 # FILENAMES
 CONFIG_DEFAULTS_FILE_NAME: Final[str] = "defaults.json"
 CONFIG_DEFAULTS_FILE_PATH: Final[str] = osp.join(CONFIGS_DIR, CONFIG_DEFAULTS_FILE_NAME)
 DOWNSTREAM_TASK_DATA_FILE_NAME: Final[str] = "downstream_task_data.csv"
 DOWNSTREAM_METADATA_JSON_FILE_NAME: Final[str] = "downstream_task_metadata.json"
+RUN_METADATA_FILE_NAME: Final[str] = "run_metadata.json"
+RUN_METADATA_HISTORY_FILE_NAME: Final[str] = "run_metadata_history.jsonl"
+
+EMBEDDING_RUN_LOG_FILE_TEMPLATE: Final[str] = "{algorithm}_{dataset}_dim{dimension}_s{seed}.log"
+
+EMBEDDING_COSTS_CONFIG_FILE_TEMPLATE: Final[str] = "{algorithm}_{dataset}_dim{dimension}_s{seed}.json"
+EMBEDDING_COSTS_DOWNSTREAM_LOG_FILE_TEMPLATE: Final[str] = (
+    "{algorithm}_{dataset}_dim{dimension}_s{seed}_{classifier}_downstream.log"
+)
+EMBEDDING_COSTS_FILE_NAME: Final[str] = "embedding_costs.csv"
+EMBEDDING_COSTS_SUMMARY_FILE_NAME: Final[str] = "embedding_costs_summary.csv"
+DOWNSTREAM_COSTS_FILE_NAME: Final[str] = "downstream_costs.csv"
+DOWNSTREAM_COSTS_SUMMARY_FILE_NAME: Final[str] = "downstream_costs_summary.csv"
+
+HYPERPARAMETER_SENSITIVITY_BEST_PARAMS_FILE_NAME: Final[str] = "best_params.json"
+HYPERPARAMETER_SENSITIVITY_OUTPUTS_FILE_TEMPLATE: Final[str] = "outputs_s{seed}.npy"
+HYPERPARAMETER_SENSITIVITY_PREDICTIONS_FILE_TEMPLATE: Final[str] = "predictions_s{seed}.npy"
+HYPERPARAMETER_SENSITIVITY_SCORES_FILE_TEMPLATE: Final[str] = "scores_s{seed}.json"
+HYPERPARAMETER_SENSITIVITY_CLASSIFIER_PARAMS_FILE_TEMPLATE: Final[str] = "classifier_params_s{seed}.json"
+HYPERPARAMETER_SENSITIVITY_STAGE1_TUNING_SUMMARY_BY_DIMENSION_FILE_NAME: Final[str] = (
+    "stage1_tuning_summary_by_dimension.json"
+)
+HYPERPARAMETER_SENSITIVITY_STAGE1_TUNING_RESULTS_FILE_NAME: Final[str] = "stage1_tuning_results.csv"
+HYPERPARAMETER_SENSITIVITY_STAGE1_COMPARISON_FILE_NAME: Final[str] = (
+    "stage1_anchor_vs_dimension_specific.csv"
+)
+HYPERPARAMETER_SENSITIVITY_STAGE1_COMPARISON_LEGACY_JSON_FILE_NAME: Final[str] = (
+    "stage1_anchor_vs_dimension_specific.json"
+)
+HYPERPARAMETER_SENSITIVITY_STAGE2_SELECTED_DIMENSIONS_FILE_NAME: Final[str] = "stage2_selected_dimensions.json"
+HYPERPARAMETER_SENSITIVITY_STAGE2_EMBEDDING_RUNS_FILE_NAME: Final[str] = "stage2_embedding_runs.csv"
+HYPERPARAMETER_SENSITIVITY_STAGE2_DOWNSTREAM_TUNING_RESULTS_FILE_NAME: Final[str] = (
+    "stage2_downstream_tuning_results.csv"
+)
+HYPERPARAMETER_SENSITIVITY_STAGE2_DOWNSTREAM_PERFORMANCE_FILE_NAME: Final[str] = (
+    "stage2_downstream_performance.csv"
+)
+HYPERPARAMETER_SENSITIVITY_STAGE2_REPRESENTATIONAL_STABILITY_FILE_NAME: Final[str] = (
+    "stage2_representational_stability.csv"
+)
+HYPERPARAMETER_SENSITIVITY_STAGE2_FUNCTIONAL_STABILITY_FILE_NAME: Final[str] = (
+    "stage2_functional_stability.csv"
+)
+HYPERPARAMETER_SENSITIVITY_STAGE2_REPRESENTATIONAL_STABILITY_SUMMARY_FILE_NAME: Final[str] = (
+    "stage2_representational_stability_summary.csv"
+)
+HYPERPARAMETER_SENSITIVITY_STAGE2_FUNCTIONAL_STABILITY_SUMMARY_FILE_NAME: Final[str] = (
+    "stage2_functional_stability_summary.csv"
+)
+HYPERPARAMETER_SENSITIVITY_STAGE2_DOWNSTREAM_PERFORMANCE_SUMMARY_FILE_NAME: Final[str] = (
+    "stage2_downstream_performance_summary.csv"
+)
+
+STABILITY_PERFORMANCE_BOOTSTRAP_RUN_SUMMARY_FILE_TEMPLATE: Final[str] = "{stem}_summary.json"
+STABILITY_PERFORMANCE_BOOTSTRAP_RUN_BOOTSTRAPS_FILE_TEMPLATE: Final[str] = "{stem}_bootstraps.csv"
+STABILITY_PERFORMANCE_BOOTSTRAP_RUN_STEM_ALL_CLASSIFIERS_TOKEN: Final[str] = "all"
 
 
 def TMP_TUNING_RESULTS_FILE_NAME(tune_id: int) -> str:

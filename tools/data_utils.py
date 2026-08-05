@@ -349,9 +349,9 @@ def load_empirical_dataset(dataset_name: DATASET, dataset_params: Dict[str, Any]
     if not osp.isfile(downstream_df_path) or reload:
         create_downstream_df(dataset, dataset_params)
 
-    # Save edge list to a text file for your existing pipeline
-
-    _write_edge_list_file(dataset, edgelist_file_path)
+    # Save edge list to a text file for the existing pipeline.
+    if not osp.isfile(edgelist_file_path) or reload:
+        _write_edge_list_file(dataset, edgelist_file_path)
 
     return dataset, edgelist_file_path
 

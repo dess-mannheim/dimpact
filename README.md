@@ -2,7 +2,7 @@
 
 This repository is the companion repository for the paper
 ["The Impact of Dimensionality on the Stability of Node Embeddings"](https://arxiv.org/abs/2604.08492).
-It contains the reference code for reproducing experiments on how node embedding dimensionality affects downstream 
+It contains the reference code for reproducing experiments on how node embedding dimensionality affects downstream
 performance, representational stability across random seeds, and functional stability across downstream predictions.
 
 Below we describe the design of the repository and how to rerun our experiments.
@@ -48,7 +48,8 @@ Experiment-wide defaults and path helpers are centralized in `paths_globals.py`.
 
 ## 2. Repository Structure
 
-The main directories group model implementations, dataset handling, experiment utilities, and stability measures:
+The main directories group model implementations, dataset handling, experiment utilities, stability measures, and
+publication analyses:
 
 - `configs/`  
   Default per-model training hyperparameters.
@@ -60,10 +61,8 @@ The main directories group model implementations, dataset handling, experiment u
   Conda environment specifications for the main environment and method-specific environments.
 
 - `models/`  
-  Embedding implementations grouped by framework/source (`pyg`, `grape`, `karateclub`, `verse`), plus downstream classifier utilities.
-
-- `min_ge/`  
-  Code for estimating optimal embedding dimensions according to the [MinGE method](https://doi.org/10.24963/ijcai.2021/381).
+  Embedding implementations grouped by framework/source (`pyg`, `grape`, `karateclub`, `verse`), plus downstream
+  classifier utilities.
 
 - `stability/measures/`  
   Representational and functional similarity measures.
@@ -71,12 +70,26 @@ The main directories group model implementations, dataset handling, experiment u
 - `tools/`  
   Shared utilities for data loading, configuration, tuning selection, embedding loading, and analysis helpers.
 
+- `case_studies/`  
+  Publication case-study scripts for embedding costs, stability-performance bootstrap analysis, hyperparameter
+  sensitivity, and MinGE. See `case_studies/README.md` for case-study-specific commands and output files.
+
+- `plotting/`  
+  Publication plotting/table helpers in `viz.py` and the `plots_tables.ipynb` notebook.
+
+- `output/`  
+  Generated embeddings, downstream results, stability results, case-study reports, plots, and tables.
+
 Experiment-wide constants for names, defaults, and path construction are centralized in `paths_globals.py`.
-The main root-level scripts are the executable workflow entry points; they are introduced in the order they are used below.
+The main root-level scripts are the executable workflow entry points; they are introduced in the order they are used
+below.
 
 ## 3. Workflow
 
-All workflow scripts expose their full argument list through `--help`. In the examples below, `-dim` is shown only when a restricted dimension subset is useful. If omitted, tuning uses the default tuning dimension, while training and stability scripts use the default experiment dimension grid from `paths_globals.py`. Seed defaults are also defined centrally and do not need to be passed explicitly to reproduce the default runs.
+All workflow scripts expose their full argument list through `--help`. In the examples below, `-dim` is shown only when
+a restricted dimension subset is useful. If omitted, tuning uses the default tuning dimension, while training and
+stability scripts use the default experiment dimension grid from `paths_globals.py`. Seed defaults are also defined
+centrally and do not need to be passed explicitly to reproduce the default runs.
 
 ### Step A - Tune Embedding Hyperparameters
 
@@ -144,11 +157,30 @@ python stability/functional.py -a graphsage -d Cora -c LogisticRegression MLP --
 
 Results are written to `output/stability_results/<algorithm>/<dataset>/.../stability_results_functional.json`.
 
-## 4. Setup Notes
+## 4. Case Studies and Plotting
 
-- `envs/dimpact.yml` records the reference environment used for the main code path. It should be treated as a reproducibility reference; on other machines or future package distributions, individual dependency versions may need adjustment.
-- `node2vec` is launched through a separate `grape` environment, and `asne` through a separate `karateclub` environment. YAML files for both method-specific environments are provided in `envs/`.
-- `verse` uses C++ sources under `models/verse/src/`, which need to be compiled before running VERSE experiments. The included code follows the reference implementation at <https://github.com/xgfs/verse>.
+Case-study scripts are collected in `case_studies/` and should be run from the repository root with module syntax:
+
+```bash
+python -m case_studies.embedding_costs ...
+```
+
+Case-study outputs are written under the regular output directory as `output/<case_study_name>/`.
+See `case_studies/README.md` for details on the embedding-cost, stability-performance-bootstrap,
+hyperparameter-sensitivity, and MinGE analyses.
+
+Publication plotting functions live in `plotting/viz.py`; the notebook `plotting/plots_tables.ipynb` assembles the main
+figures and tables. Generated plots and tables are written under `output/plots/` and `output/tables/`.
+
+## 5. Setup Notes
+
+- `envs/dimpact.yml` records the reference environment used for the main code path. It should be treated as a
+  reproducibility reference; on other machines or future package distributions, individual dependency versions may need
+  adjustment.
+- `node2vec` is launched through a separate `grape` environment, and `asne` through a separate `karateclub` environment.
+  YAML files for both method-specific environments are provided in `envs/`.
+- `verse` uses C++ sources under `models/verse/src/`, which need to be compiled before running VERSE experiments. The
+  included code follows the reference implementation at <https://github.com/xgfs/verse>.
 - First dataset load may trigger dataset preparation or download, depending on the dataset.
 - Large sweeps can be CPU/RAM intensive; use `--n_jobs` conservatively.
 
